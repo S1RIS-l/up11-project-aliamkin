@@ -1,12 +1,24 @@
-import psycopg2
+import psycopg
+from psycopg import Error as PsycopgError
 
 def calculate_price(product_id, base_price):
+    if not isinstance(product_id, int):
+        print("Ошибка: product_id должен быть числом")
+        return None
+    if not isinstance(base_price, (int, float)):
+        print("Ошибка: base_price должен быть числом")
+        return None
+    if base_price <= 0:
+        print("Ошибка: цена должна быть > 0")
+        return None
+
     conn = None
+    cursor = None
     try:
-        conn = psycopg2.connect(
+        conn = psycopg.connect(
             host="localhost",
             port=5432,
-            database="opticworld",
+            dbname="opticworld",
             user="postgres",
             password="123"
         )
@@ -21,26 +33,36 @@ def calculate_price(product_id, base_price):
         """
         cursor.execute(query, (product_id,))
         result = cursor.fetchone()
-        orders_count = result[0] if result else 0
         
-        cursor.close()
-        conn.close()
+        if result is None:
+            print("Ошибка: нет результата")
+            return None
+            
+        orders_count = result[0]
         
         if orders_count == 0:
             final_price = float(base_price) * 0.75
             print(f"Товар {product_id}: заказов нет, скидка 25%, итоговая цена = {final_price}")
         else:
             final_price = float(base_price)
-            print(f"Товар {product_id}: заказов {orders_count}, цена без скидки = {final_price}")
+            print(f"Товар {product_id}: заказов {orders_count}, итоговая цена = {final_price}")
         
         return final_price
         
-    except psycopg2.Error as e:
+    except PsycopgError as e:
         print(f"Ошибка БД: {e}")
+        return None
+    finally:
+        if cursor:
+            cursor.close()
         if conn:
             conn.close()
-        return None
+
 
 if __name__ == "__main__":
-    result = calculate_price(1, 1000)
-    print(f"Результат: {result}")
+    calculate_price("abc", 1000)
+    calculate_price(1, "abc")
+    calculate_price(1, -100)
+    calculate_price(1, None)
+    calculate_price(1, 1000)
+    calculate_price(99999, 1000)

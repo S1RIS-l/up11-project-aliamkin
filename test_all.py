@@ -1,5 +1,5 @@
 import psycopg2
-from discount import calculate_price
+from src.discount import calculate_price
 
 def test_all_products():
     conn = None
