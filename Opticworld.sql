@@ -1,20 +1,13 @@
--- =============================================
--- Скрипт создания БД «Мир оптики» (Тема 16)
--- =============================================
+DROP DATABASE IF EXISTS formadessert;
+CREATE DATABASE formadessert;
+\c formadessert;
 
--- 1. Создание БД
-CREATE DATABASE opticworld1;
-
--- Переключаемся на созданную базу
-\c opticworld1;
-
--- 2. Справочники
 CREATE TABLE roles (
     role_id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL UNIQUE
+    name VARCHAR(50) NOT NULL UNIQUE
 );
 INSERT INTO roles (name) VALUES 
-('Администратор'), ('Менеджер'), ('Авторизованный пользователь');
+('Администратор'), ('Менеджер'), ('Клиент');
 
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY,
@@ -25,19 +18,10 @@ CREATE TABLE users (
     role_id INTEGER REFERENCES roles(role_id)
 );
 
-INSERT INTO users (last_name, first_name, middle_name, login, role_id) VALUES 
-('Иванов', 'Иван', 'Сергеевич', 'admin', 1),
-('Петров', 'Пётр', 'Алексеевич', 'manager1', 2),
-('Смирнова', 'Ольга', 'Викторовна', 'manager2', 2),
-('Сидоров', 'Алексей', 'Иванович', 'client01', 3),
-('Кузнецова', 'Анна', 'Ивановна', 'client02', 3);
-
 CREATE TABLE categories (
     category_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE
 );
-INSERT INTO categories (name) VALUES 
-('Оправы'), ('Солнцезащитные очки'), ('Аксессуары');
 
 CREATE TABLE subcategories (
     subcategory_id SERIAL PRIMARY KEY,
@@ -45,77 +29,113 @@ CREATE TABLE subcategories (
     name VARCHAR(100) NOT NULL,
     UNIQUE (category_id, name)
 );
-INSERT INTO subcategories (category_id, name) VALUES 
-(1, 'Металлические'), (1, 'Пластиковые'),
-(2, 'Готовые изделия'), (3, 'Футляры');
+
+CREATE TABLE manufacturers (
+    manufacturer_id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE
+);
 
 CREATE TABLE variants (
     variant_id SERIAL PRIMARY KEY,
     name VARCHAR(50) NOT NULL UNIQUE
 );
-INSERT INTO variants (name) VALUES 
-('Чёрный'), ('Серый'), ('Коричневый');
 
--- 3. Товары
-CREATE TABLE products (
-    product_id SERIAL PRIMARY KEY,
-    category_id INTEGER REFERENCES categories(category_id),
-    subcategory_id INTEGER REFERENCES subcategories(subcategory_id),
-    name VARCHAR(200) NOT NULL,
-    manufacturer VARCHAR(100) NOT NULL,
-    image VARCHAR(100),
-    description TEXT,
-    composition TEXT,
-    base_price NUMERIC(10,2) CHECK (base_price > 0),
-    UNIQUE (name, manufacturer)
+CREATE TABLE statuses (
+    status_id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE
 );
 
-INSERT INTO products (category_id, subcategory_id, name, manufacturer, image, description, composition, base_price) VALUES 
-(1, 1, 'Оправа Круг', 'Ясный взгляд', 'IMG_16_001.png', 'Оправа Круг. Категория: Оправы. Тип: Металлические.', 'Металлическая оправа; демонстрационные вставки без оптической силы', 1990),
-(1, 1, 'Оправа Овал', 'Фокус', 'IMG_16_002.png', 'Оправа Овал. Категория: Оправы. Тип: Металлические.', 'Металлическая оправа; демонстрационные вставки без оптической силы', 2290),
-(1, 1, 'Оправа Линия', 'Линза', 'IMG_16_003.png', 'Оправа Линия. Категория: Оправы. Тип: Металлические.', 'Металлическая оправа; демонстрационные вставки без оптической силы', 2590),
-(2, 3, 'Очки Солнце', 'Ясный взгляд', 'IMG_16_017.png', 'Очки Солнце. Категория: Солнцезащитные очки. Тип: Готовые изделия.', 'Полимерная оправа; тонированные линзы без коррекции зрения', 1290),
-(3, 4, 'Футляр Линия', 'Линза', NULL, 'Футляр Линия. Категория: Аксессуары. Тип: Футляры.', 'Полимерный корпус; текстильная подкладка', 750);
+CREATE TABLE products (
+    product_id SERIAL PRIMARY KEY,
+    article VARCHAR(20) NOT NULL UNIQUE,
+    category_id INTEGER REFERENCES categories(category_id),
+    subcategory_id INTEGER REFERENCES subcategories(subcategory_id),
+    manufacturer_id INTEGER REFERENCES manufacturers(manufacturer_id),
+    name VARCHAR(200) NOT NULL,
+    image VARCHAR(200),
+    material VARCHAR(100),
+    description TEXT,
+    price NUMERIC(10,2) CHECK (price >= 0)
+);
 
--- 4. Товарные позиции
 CREATE TABLE stock_items (
     stock_item_id SERIAL PRIMARY KEY,
     product_id INTEGER REFERENCES products(product_id),
     variant_id INTEGER REFERENCES variants(variant_id),
     quantity INTEGER CHECK (quantity >= 0),
-    price NUMERIC(10,2) CHECK (price > 0),
     UNIQUE (product_id, variant_id)
 );
 
-INSERT INTO stock_items (product_id, variant_id, quantity, price) VALUES 
-(1, 1, 24, 1990), (1, 2, 5, 1990), (1, 3, 10, 1990),
-(2, 1, 27, 2290), (2, 2, 8, 2290), (2, 3, 13, 2290);
-
--- 5. Заказы
 CREATE TABLE orders (
     order_id SERIAL PRIMARY KEY,
     order_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    user_id INTEGER REFERENCES users(user_id)
+    user_id INTEGER REFERENCES users(user_id),
+    status_id INTEGER REFERENCES statuses(status_id)
 );
 
-INSERT INTO orders (order_id, order_date, user_id) VALUES 
-(1, '2026-04-04', 4),
-(2, '2026-04-06', 5),
-(3, '2026-04-08', 1),
-(4, '2026-04-10', 2),
-(5, '2026-04-12', 3); 
-
--- 6. Состав заказов
 CREATE TABLE order_items (
     order_item_id SERIAL PRIMARY KEY,
     order_id INTEGER REFERENCES orders(order_id),
     stock_item_id INTEGER REFERENCES stock_items(stock_item_id),
     quantity INTEGER CHECK (quantity > 0),
-    price NUMERIC(10,2) CHECK (price > 0)
+    price NUMERIC(10,2) CHECK (unit_price >= 0)
 );
 
-INSERT INTO order_items (order_id, stock_item_id, quantity, price) VALUES 
-(1, 1, 2, 1990),
-(1, 4, 1, 2290),
-(2, 2, 1, 2590),
-(2, 5, 2, 2890);
+1.7:
+INSERT INTO categories (name) VALUES 
+('Формы для выпечки'), ('Кондитерские лопатки'), ('Коврики'), 
+('Кисти'), ('Кондитерские мешки'), ('Скребки');
+
+INSERT INTO subcategories (category_id, name) VALUES 
+(1, 'Стандартные'), (1, 'Профессиональные'),
+(2, 'Стандартные'), (2, 'Профессиональные'),
+(3, 'Стандартные'), (3, 'Профессиональные'),
+(4, 'Стандартные'), (4, 'Профессиональные'),
+(5, 'Стандартные'), (5, 'Профессиональные'),
+(6, 'Стандартные'), (6, 'Профессиональные');
+
+INSERT INTO manufacturers (name) VALUES 
+('СиликоПроф'), ('КондитерЛайн'), ('ДесертФорм');
+
+INSERT INTO variants (name) VALUES 
+('Синий'), ('Красный');
+
+INSERT INTO products (article, category_id, subcategory_id, manufacturer_id, name, image, material, description, price) VALUES 
+('FD0001', 1, 1, 1, 'Форма силиконовая 101', 'Images/FD0001.png', 'Силикон', 'Форма силиконовая для приготовления и оформления десертов.', 750.00),
+('FD0002', 2, 1, 2, 'Лопатка кондитерская 102', 'Images/FD0002.png', 'Силикон', 'Лопатка кондитерская для приготовления и оформления десертов.', 480.00),
+('FD0003', 3, 1, 3, 'Коврик для теста 103', 'Images/FD0003.png', 'Силикон', 'Коврик для теста для приготовления и оформления десертов.', 1150.00),
+('FD0004', 4, 1, 1, 'Кисть кулинарная 104', 'Images/FD0004.png', 'Силикон', 'Кисть кулинарная для приготовления и оформления десертов.', 620.00),
+('FD0005', 5, 1, 2, 'Мешок кондитерский многоразовый 105', 'Images/FD0005.png', 'Силикон', 'Мешок кондитерский многоразовый для приготовления и оформления десертов.', 950.00);
+
+1.8:
+INSERT INTO users (login, last_name, first_name, middle_name, role_id) VALUES 
+('admin', 'Миронов', 'Алексей', 'Игоревич', 1),
+('manager', 'Лебедева', 'Мария', 'Олеговна', 2),
+('client1', 'Соколов', 'Иван', 'Александрович', 3),
+('client2', 'Кузнецова', 'Анна', 'Сергеевна', 3),
+('client3', 'Волков', 'Денис', 'Александрович', 3),
+('client4', 'Орлова', 'Елена', 'Сергеевна', 3),
+('client5', 'Павлов', 'Олег', 'Александрович', 3),
+('client6', 'Белова', 'Ирина', 'Сергеевна', 3);
+
+1.9:
+INSERT INTO statuses (name) VALUES ('Новый'), ('Подтверждён');
+
+INSERT INTO stock_items (product_id, variant_id, quantity) VALUES 
+(1, 1, 0), (1, 2, 0),
+(2, 1, 1), (2, 2, 2),
+(3, 1, 2), (3, 2, 2);
+
+INSERT INTO orders (order_id, order_date, user_id, status_id) VALUES 
+(1, '2026-09-01', 3, 2),
+(2, '2026-09-02', 4, 1),
+(3, '2026-09-03', 5, 2),
+(4, '2026-09-04', 6, 1),
+(5, '2026-09-05', 7, 2);
+
+INSERT INTO order_items (order_id, stock_item_id, quantity, unit_price) VALUES 
+(1, 10, 2, 950.00),
+(2, 13, 1, 1350.00),
+(3, 18, 2, 1750.00),
+(3, 19, 1, 1220.00),
+(4, 21, 1, 1550.00);
