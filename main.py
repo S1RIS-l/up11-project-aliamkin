@@ -1,22 +1,23 @@
 import sys
 import os
-from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, 
-                               QWidget, QScrollArea, QHBoxLayout)
+from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
 from discount import calculate_price
+from login_window import LoginWindow
 
 def create_card(product):
     product_id, name, category, manufacturer, composition, price, image_path, total_quantity = product
     
     card = QWidget()
+    card.setObjectName("ProductCard")
     card.setStyleSheet("""
-        QWidget {
+        #ProductCard {
             background-color: #FFFFFF;
-            border: none;
+            border: 2px solid #70B2AF;
         }
-        QLabel {
+        #ProductCard QLabel {
             color: #000000;
             font-family: Calibri;
             border: none;
@@ -88,8 +89,9 @@ def create_card(product):
     return card
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, role_id=None):
         super().__init__()
+        self.role_id = role_id
         self.setWindowTitle("Мир Оптики")
         self.resize(900, 700)
         self.setWindowIcon(QIcon("resources/icon.ico"))
@@ -125,6 +127,7 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(header_layout)
 
         container = QWidget()
+        container.setStyleSheet("background-color: #FFFFFF;")
         list_layout = QVBoxLayout(container)
         list_layout.setSpacing(15)
         list_layout.setContentsMargins(0, 0, 0, 0)
@@ -137,7 +140,7 @@ class MainWindow(QMainWindow):
         
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; }")
+        scroll.setStyleSheet("QScrollArea { border: none; background-color: #FFFFFF;}")
         scroll.setWidget(container)
         
         main_layout.addWidget(scroll)
@@ -151,6 +154,9 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
+    
+    db = Database()
+    login_window = LoginWindow(db)
+    login_window.show()
+    
     sys.exit(app.exec())
