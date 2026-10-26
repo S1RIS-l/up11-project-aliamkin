@@ -1,6 +1,6 @@
 import sys
 import os
-from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout)
+from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
@@ -88,11 +88,12 @@ def create_card(product):
     
     return card
 
+
 class MainWindow(QMainWindow):
     def __init__(self, role_id=None):
         super().__init__()
         self.role_id = role_id
-        self.setWindowTitle("Мир Оптики")
+        self.setWindowTitle("МирОптики")
         self.resize(900, 700)
         self.setWindowIcon(QIcon("resources/icon.ico"))
         
@@ -106,10 +107,14 @@ class MainWindow(QMainWindow):
         self.db = Database()
         self.products = self.db.get_products()
         
+        self.setup_ui()
+        self.setup_role_interface()
+
+    def setup_ui(self):
         main_widget = QWidget()
         main_layout = QVBoxLayout(main_widget)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(15)
 
         header_layout = QHBoxLayout()
         
@@ -125,6 +130,36 @@ class MainWindow(QMainWindow):
         header_layout.addStretch()
         
         main_layout.addLayout(header_layout)
+
+        buttons_layout = QHBoxLayout()
+        
+        self.order_button = QPushButton("Оформить заказ")
+        self.manager_button = QPushButton("Заказы (менеджер)")
+        self.admin_button = QPushButton("Админ-панель")
+        
+        button_style = """
+            QPushButton {
+                background-color: #D2F6E7;
+                color: #000000;
+                font-family: Calibri;
+                padding: 8px 16px;
+                font-size: 14px;
+                border-radius: 0px;
+            }
+            QPushButton:hover {
+                background-color: #70B2AF;
+            }
+        """
+        self.order_button.setStyleSheet(button_style)
+        self.manager_button.setStyleSheet(button_style)
+        self.admin_button.setStyleSheet(button_style)
+        
+        buttons_layout.addWidget(self.order_button)
+        buttons_layout.addWidget(self.manager_button)
+        buttons_layout.addWidget(self.admin_button)
+        buttons_layout.addStretch()
+        
+        main_layout.addLayout(buttons_layout)
 
         container = QWidget()
         container.setStyleSheet("background-color: #FFFFFF;")
@@ -146,11 +181,30 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(scroll)
         
         self.setCentralWidget(main_widget)
-    
+
+    def setup_role_interface(self):
+        if self.role_id == 1:
+            self.admin_button.show()
+            self.manager_button.show()
+            self.order_button.hide()
+        elif self.role_id == 2:
+            self.admin_button.hide()
+            self.manager_button.show()
+            self.order_button.hide()
+        elif self.role_id == 3:
+            self.admin_button.hide()
+            self.manager_button.hide()
+            self.order_button.show()
+        else:
+            self.order_button.hide()
+            self.manager_button.hide()
+            self.admin_button.hide()
+
     def closeEvent(self, event):
         if self.db:
             self.db.close_all()
         event.accept()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -1,13 +1,17 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox)
 from PySide6.QtGui import QIcon
+import os
 
 class LoginWindow(QWidget):
     def __init__(self, db):
         super().__init__()
         self.db = db
+        self.main_window = None
         self.setWindowTitle("Авторизация")
-        self.resize(300, 200)
-        self.setWindowIcon(QIcon("resources/icon.ico"))
+        self.resize(300, 250)
+        
+        if os.path.exists("resources/icon.ico"):
+            self.setWindowIcon(QIcon("resources/icon.ico"))
         
         self.setStyleSheet("""
             QWidget {
@@ -29,6 +33,7 @@ class LoginWindow(QWidget):
                 background-color: #70B2AF;
                 color: #000000;
                 border: none;
+                 border-radius: 0px;
             }
             QPushButton:hover {
                 background-color: #D2F6E7;
@@ -72,12 +77,22 @@ class LoginWindow(QWidget):
             else:
                 self.user_id = result[0]
                 self.role_id = result[1]
-                self.open_main_window()
+                self.open_main_window(self.role_id)
         finally:
             self.db.release_connection(conn)
     
-    def open_main_window(self):
+    def login_as_guest(self):
+        self.open_main_window(None)
+    
+    def open_main_window(self, role_id):
         from main import MainWindow
-        self.main_window = MainWindow(role_id=self.role_id)
+        self.main_window = MainWindow(role_id=role_id)
         self.main_window.show()
         self.close()
+
+    def closeEvent(self, event):
+        if self.main_window is None:
+            from main import MainWindow
+            self.main_window = MainWindow(role_id=None)
+            self.main_window.show()
+        event.accept()
