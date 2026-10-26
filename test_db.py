@@ -2,15 +2,15 @@ from database import Database
 
 def test_connection():
     db = Database()
-    conn = db.get_connection()
-    cursor = conn.cursor()
+    products = db.get_products()
     
-    cursor.execute("SELECT COUNT(*) FROM products")
-    result = cursor.fetchone()
-    print(f"Кол-во товара:{result[0]}")
+    if products is not None:
+        print(f"Кол-во товаров:{len(products)}")
+        for p in products[:3]:
+            print(p)
+    else:
+        print("Ошибка")
     
-    cursor.close()
-    db.release_connection(conn)
     db.close_all()
 
 if __name__ == "__main__":
