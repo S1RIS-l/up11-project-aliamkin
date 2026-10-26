@@ -42,10 +42,8 @@ def calculate_price(product_id, base_price):
         
         if orders_count == 0:
             final_price = float(base_price) * 0.75
-            print(f"Товар {product_id}: заказов нет, скидка 25%, итоговая цена = {final_price}")
         else:
             final_price = float(base_price)
-            print(f"Товар {product_id}: заказов {orders_count}, итоговая цена = {final_price}")
         
         return final_price
         

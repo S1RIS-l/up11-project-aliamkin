@@ -1,8 +1,11 @@
 import sys
-from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout
+import os
+from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, 
+                               QWidget, QScrollArea, QHBoxLayout)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
+from discount import calculate_price
 
 def create_card(product):
     product_id, name, category, manufacturer, composition, price, image_path, total_quantity = product
@@ -11,6 +14,7 @@ def create_card(product):
     card.setStyleSheet("""
         QWidget {
             background-color: #FFFFFF;
+            border: none;
         }
         QLabel {
             color: #000000;
@@ -26,14 +30,13 @@ def create_card(product):
     image_label = QLabel()
     pixmap = QPixmap()
     
-    if image_path:
+    if image_path is not None and os.path.exists(f"resources/{image_path}"):
         pixmap.load(f"resources/{image_path}")
-    
-    if pixmap.isNull():
+    else:
         pixmap.load("resources/picture.png")
         
-    image_label.setPixmap(pixmap.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-    image_label.setFixedSize(120, 120)
+    image_label.setPixmap(pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+    image_label.setFixedSize(100, 100)
     image_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
     card_layout.addWidget(image_label)
     
@@ -48,18 +51,17 @@ def create_card(product):
     category_label.setStyleSheet("font-size: 14px;")
     right_layout.addWidget(category_label)
     
-    if total_quantity > 5:
+    if total_quantity is not None and total_quantity > 5:
         qty_text = f"Количество: много ({total_quantity})"
         qty_color = "#000000"
-    elif total_quantity > 0:
+        quantity_label = QLabel(qty_text)
+        quantity_label.setStyleSheet(f"font-size: 14px; color: {qty_color};")
+    else:
         qty_text = f"Количество: мало ({total_quantity})"
         qty_color = "#ff8080"
-    else:
-        qty_text = "Нет в наличии"
-        qty_color = "#ff8080"
+        quantity_label = QLabel(qty_text)
+        quantity_label.setStyleSheet(f"font-size: 14px; color: {qty_color}; font-weight: bold;")
         
-    quantity_label = QLabel(qty_text)
-    quantity_label.setStyleSheet(f"font-size: 14px; color: {qty_color};")
     right_layout.addWidget(quantity_label)
     
     composition_label = QLabel(f"Состав: {composition}")
@@ -71,7 +73,12 @@ def create_card(product):
     
     price_layout = QHBoxLayout()
     price_layout.addStretch()
-    price_label = QLabel(f"{price:,.0f} руб.".replace(',', ' '))
+    
+    final_price = calculate_price(product_id, float(price))
+    if final_price is None:
+        final_price = float(price)
+        
+    price_label = QLabel(f"{final_price:,.0f} руб.".replace(',', ' '))
     price_label.setStyleSheet("font-size: 18px; font-weight: bold;")
     price_layout.addWidget(price_label)
     
@@ -83,7 +90,7 @@ def create_card(product):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("МирОптики — Каталог")
+        self.setWindowTitle("Мир Оптики")
         self.resize(900, 700)
         self.setWindowIcon(QIcon("resources/icon.ico"))
         
@@ -97,10 +104,30 @@ class MainWindow(QMainWindow):
         self.db = Database()
         self.products = self.db.get_products()
         
+        main_widget = QWidget()
+        main_layout = QVBoxLayout(main_widget)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(10)
+
+        header_layout = QHBoxLayout()
+        
+        logo_label = QLabel()
+        logo_pixmap = QPixmap("resources/logo.png")
+        logo_label.setPixmap(logo_pixmap.scaled(150, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        
+        title_label = QLabel("Мир оптики — Каталог")
+        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #000000;")
+        
+        header_layout.addWidget(logo_label)
+        header_layout.addWidget(title_label)
+        header_layout.addStretch()
+        
+        main_layout.addLayout(header_layout)
+
         container = QWidget()
         list_layout = QVBoxLayout(container)
         list_layout.setSpacing(15)
-        list_layout.setContentsMargins(15, 15, 15, 15)
+        list_layout.setContentsMargins(0, 0, 0, 0)
         
         for product in self.products:
             card = create_card(product)
@@ -113,7 +140,9 @@ class MainWindow(QMainWindow):
         scroll.setStyleSheet("QScrollArea { border: none; }")
         scroll.setWidget(container)
         
-        self.setCentralWidget(scroll)
+        main_layout.addWidget(scroll)
+        
+        self.setCentralWidget(main_widget)
     
     def closeEvent(self, event):
         if self.db:
