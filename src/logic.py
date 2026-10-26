@@ -10,14 +10,9 @@ DB_CONFIG = {
 }
 
 def get_connection():
-    """Возвращает подключение к базе данных."""
     return psycopg2.connect(**DB_CONFIG)
 
 def check_login(login):
-    """
-    Проверяет, существует ли пользователь с таким логином в БД.
-    Возвращает: строку с результатом (Вход разрешён / Ошибка).
-    """
     try:
         conn = get_connection()
         cur = conn.cursor()
@@ -33,27 +28,12 @@ def check_login(login):
         return f"Ошибка подключения к БД: {e}"
 
 def calculate_price(price, has_orders):
-    """
-    Расчёт цены со скидкой 25%, если нет заказов за месяц.
-    
-    :param price: базовая цена
-    :param has_orders: есть ли заказы за месяц (True/False)
-    :return: цена со скидкой или без
-    """
     if not has_orders:
-        return price * 0.75  # скидка 25%
+        return price * 0.75 
     else:
         return price
 
 def check_order(size, quantity, stock):
-    """
-    Проверка возможности оформления заказа.
-    
-    :param size: выбранный размер/вариант (или None)
-    :param quantity: количество
-    :param stock: доступный остаток
-    :return: сообщение о результате
-    """
     if size is None:
         return "Ошибка: выберите размер"
     if quantity <= 0:
@@ -63,13 +43,6 @@ def check_order(size, quantity, stock):
     return "Можно добавить в заказ"
 
 def search_products(category_name, search_query):
-    """
-    Ищет товары в БД по категории и поисковой строке.
-    
-    :param category_name: название категории (например, 'Оправы')
-    :param search_query: часть названия товара для поиска (например, 'Круг')
-    :return: список найденных товаров или пустой список
-    """
     try:
         conn = get_connection()
         cur = conn.cursor()
