@@ -8,7 +8,7 @@ class LoginWindow(QWidget):
         self.db = db
         self.main_window = None
         self.setWindowTitle("Авторизация")
-        self.resize(300, 250)
+        self.resize(300, 200)
         
         if os.path.exists("resources/icon.ico"):
             self.setWindowIcon(QIcon("resources/icon.ico"))
@@ -26,14 +26,15 @@ class LoginWindow(QWidget):
                 font-size: 14px;
                 padding: 5px;
                 border: 1px solid #70B2AF;
+                border-radius: 0px;
             }
             QPushButton {
                 font-size: 14px;
                 padding: 8px;
                 background-color: #70B2AF;
                 color: #000000;
-                border: none;
-                 border-radius: 0px;
+                border: 1px solid #000000;
+                border-radius: 0px;
             }
             QPushButton:hover {
                 background-color: #D2F6E7;
@@ -52,6 +53,10 @@ class LoginWindow(QWidget):
         self.login_button.clicked.connect(self.check_login)
         layout.addWidget(self.login_button)
         
+        self.cancel_button = QPushButton("Отмена")
+        self.cancel_button.clicked.connect(self.close)
+        layout.addWidget(self.cancel_button)
+        
         self.setLayout(layout)
 
     def check_login(self):
@@ -68,7 +73,10 @@ class LoginWindow(QWidget):
         
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT user_id, role_id FROM users WHERE login = %s", (login,))
+            cursor.execute(
+                "SELECT user_id, role_id, last_name, first_name, middle_name FROM users WHERE login = %s",
+                (login,)
+            )
             result = cursor.fetchone()
             cursor.close()
             
@@ -77,22 +85,24 @@ class LoginWindow(QWidget):
             else:
                 self.user_id = result[0]
                 self.role_id = result[1]
-                self.open_main_window(self.role_id)
+                last_name = result[2]
+                first_name = result[3]
+                middle_name = result[4] if result[4] else ""
+                self.full_name = f"{last_name} {first_name} {middle_name}".strip()
+                self.open_main_window()
         finally:
             self.db.release_connection(conn)
     
-    def login_as_guest(self):
-        self.open_main_window(None)
-    
-    def open_main_window(self, role_id):
+    def open_main_window(self):
         from main import MainWindow
-        self.main_window = MainWindow(role_id=role_id)
+        self.main_window = MainWindow(role_id=self.role_id, full_name=self.full_name)
         self.main_window.show()
         self.close()
 
+    
     def closeEvent(self, event):
         if self.main_window is None:
             from main import MainWindow
-            self.main_window = MainWindow(role_id=None)
+            self.main_window = MainWindow(role_id=None, full_name="Гость")
             self.main_window.show()
         event.accept()

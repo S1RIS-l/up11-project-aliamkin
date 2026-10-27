@@ -1,6 +1,6 @@
 import sys
 import os
-from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton)
+from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton, QMessageBox)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
@@ -90,9 +90,10 @@ def create_card(product):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, role_id=None):
+    def __init__(self, role_id=None, full_name=None):
         super().__init__()
         self.role_id = role_id
+        self.full_name = full_name
         self.setWindowTitle("МирОптики")
         self.resize(900, 700)
         self.setWindowIcon(QIcon("resources/icon.ico"))
@@ -122,14 +123,40 @@ class MainWindow(QMainWindow):
         logo_pixmap = QPixmap("resources/logo.png")
         logo_label.setPixmap(logo_pixmap.scaled(150, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         
-        title_label = QLabel("Мир оптики — Каталог")
-        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #000000;")
-        
         header_layout.addWidget(logo_label)
-        header_layout.addWidget(title_label)
         header_layout.addStretch()
         
+        if self.full_name:
+            self.name_label = QLabel(f"ФИО: {self.full_name}")
+            self.name_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #000000;")
+            header_layout.addWidget(self.name_label)
+            
+            spacer = QLabel("  ")
+            header_layout.addWidget(spacer)
+        
+        self.logout_button = QPushButton("Выход")
+        self.logout_button.setStyleSheet("""
+            QPushButton {
+                background-color: #ff8080;
+                color: #000000;
+                font-family: Calibri;
+                padding: 6px 12px;
+                border-radius: 0px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #ff5050;
+            }
+        """)
+        self.logout_button.clicked.connect(self.logout)
+        header_layout.addWidget(self.logout_button)
+        
         main_layout.addLayout(header_layout)
+
+        title_label = QLabel("Мир оптики — Каталог")
+        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #000000;")
+        title_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(title_label)
 
         buttons_layout = QHBoxLayout()
         
@@ -143,8 +170,8 @@ class MainWindow(QMainWindow):
                 color: #000000;
                 font-family: Calibri;
                 padding: 8px 16px;
-                font-size: 14px;
                 border-radius: 0px;
+                font-size: 14px;
             }
             QPushButton:hover {
                 background-color: #70B2AF;
@@ -181,7 +208,19 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(scroll)
         
         self.setCentralWidget(main_widget)
+        
 
+    def logout(self):
+        reply = QMessageBox.question(
+            self, "Выход", "Вы уверены, что хотите выйти?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            from login_window import LoginWindow
+            self.login_window = LoginWindow(self.db)
+            self.login_window.show()
+            self.close()
+    
     def setup_role_interface(self):
         if self.role_id == 1:
             self.admin_button.show()
