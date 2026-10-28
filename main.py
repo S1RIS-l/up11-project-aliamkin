@@ -129,7 +129,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.role_id = role_id
         self.full_name = full_name
-        self.setWindowTitle("МирОптики")
+        self.setWindowTitle("Мир оптики")
         self.resize(900, 700)
         self.setWindowIcon(QIcon("resources/icon.ico"))
         
@@ -158,11 +158,7 @@ class MainWindow(QMainWindow):
         logo_pixmap = QPixmap("resources/logo.png")
         logo_label.setPixmap(logo_pixmap.scaled(150, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         
-        title_label = QLabel("Мир оптики — Каталог")
-        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #000000;")
-        
         header_layout.addWidget(logo_label)
-        header_layout.addWidget(title_label)
         header_layout.addStretch()
         
         if self.full_name:
@@ -173,7 +169,7 @@ class MainWindow(QMainWindow):
         self.logout_button = QPushButton("Выход")
         self.logout_button.setStyleSheet("""
             QPushButton {
-                background-color: #ff8080;
+                background-color: #70B2AF;
                 color: #000000;
                 font-family: Calibri;
                 padding: 8px 16px;
@@ -181,13 +177,22 @@ class MainWindow(QMainWindow):
                 font-size: 14px;
             }
             QPushButton:hover {
-                background-color: #ff5050;
+                background-color: #D2F6E7;
             }
         """)
         self.logout_button.clicked.connect(self.logout)
         header_layout.addWidget(self.logout_button)
         
-        main_layout.addLayout(header_layout)
+        header_widget = QWidget()
+        header_widget.setLayout(header_layout)
+        header_widget.setStyleSheet("background-color: #D2F6E7; border-radius: 0px; padding: 5px;")
+        
+        main_layout.addWidget(header_widget)
+
+        title_label = QLabel("Мир оптики — Каталог")
+        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #000000;")
+        title_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(title_label)
 
         buttons_layout = QHBoxLayout()
         
@@ -197,7 +202,7 @@ class MainWindow(QMainWindow):
         
         button_style = """
             QPushButton {
-                background-color: #D2F6E7;
+                background-color: #70B2AF;
                 color: #000000;
                 font-family: Calibri;
                 padding: 8px 16px;
@@ -205,7 +210,7 @@ class MainWindow(QMainWindow):
                 font-size: 14px;
             }
             QPushButton:hover {
-                background-color: #70B2AF;
+                background-color: #D2F6E7;
             }
         """
         self.order_button.setStyleSheet(button_style)
