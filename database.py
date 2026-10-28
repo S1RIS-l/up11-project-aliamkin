@@ -47,6 +47,19 @@ class Database:
             return products
         finally:
             self.release_connection(conn)
+
+    def get_categories(self):
+        conn = self.get_connection()
+        if conn is None:
+            return []
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM categories ORDER BY name")
+            categories = cursor.fetchall()
+            cursor.close()
+            return categories
+        finally:
+            self.release_connection(conn)
     
     def get_connection(self):
         if self.connection_pool is None:

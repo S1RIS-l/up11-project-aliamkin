@@ -1,6 +1,6 @@
 import sys
 import os
-from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton, QMessageBox)
+from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton, QMessageBox, QComboBox, QLineEdit)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
@@ -194,6 +194,31 @@ class MainWindow(QMainWindow):
         title_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title_label)
 
+        controls_layout = QHBoxLayout()
+        
+        self.sort_combo = QComboBox()
+        self.sort_combo.addItems(["По возрастанию", "По убыванию"])
+        self.sort_combo.currentIndexChanged.connect(self.load_products)
+        controls_layout.addWidget(QLabel("Сортировка:"))
+        controls_layout.addWidget(self.sort_combo)
+        
+        self.filter_combo = QComboBox()
+        self.filter_combo.addItem("Все категории")
+        categories = self.db.get_categories()
+        for cat in categories:
+            self.filter_combo.addItem(cat[0])
+        self.filter_combo.currentIndexChanged.connect(self.load_products)
+        controls_layout.addWidget(QLabel("Категория:"))
+        controls_layout.addWidget(self.filter_combo)
+        
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Поиск...")
+        self.search_input.textChanged.connect(self.load_products)
+        controls_layout.addWidget(QLabel("Поиск:"))
+        controls_layout.addWidget(self.search_input)
+        
+        main_layout.addLayout(controls_layout)
+
         buttons_layout = QHBoxLayout()
         
         self.order_button = QPushButton("Оформить заказ")
@@ -236,14 +261,78 @@ class MainWindow(QMainWindow):
             
         list_layout.addStretch()
         
+        self.catalog_scroll = QScrollArea()
+        self.catalog_scroll.setWidgetResizable(True)
+        self.catalog_scroll.setStyleSheet("QScrollArea { border: none; background-color: #FFFFFF;}")
+        self.catalog_scroll.setWidget(container)
+        
+        main_layout.addWidget(self.catalog_scroll)
+        
+        self.setCentralWidget(main_widget)
+
+    def load_products(self):
+        search = self.search_input.text()
+        category = self.filter_combo.currentText()
+        sort = self.sort_combo.currentText()
+        
+        search_pattern = f"%{search}%"
+        
+        if sort == "По возрастанию":
+            order = "ASC"
+        else:
+            order = "DESC"
+        
+        query = f"""
+            SELECT 
+                p.product_id, 
+                p.name, 
+                c.name AS category,
+                p.manufacturer, 
+                p.composition, 
+                p.price, 
+                p.image_path,
+                COALESCE(SUM(si.quantity), 0) AS total_quantity
+            FROM products p
+            JOIN categories c ON p.category_id = c.category_id
+            LEFT JOIN stock_items si ON p.product_id = si.product_id
+            WHERE (p.name ILIKE %s OR p.description ILIKE %s)
+            AND (c.name = %s OR %s = 'Все категории')
+            GROUP BY p.product_id, c.name
+            ORDER BY p.price {order}
+        """
+        
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, (search_pattern, search_pattern, category, category))
+            self.products = cursor.fetchall()
+            cursor.close()
+        finally:
+            self.db.release_connection(conn)
+        
+        self.refresh_catalog()
+
+    def refresh_catalog(self):
+        container = QWidget()
+        container.setStyleSheet("background-color: #FFFFFF;")
+        list_layout = QVBoxLayout(container)
+        list_layout.setSpacing(15)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+        
+        for product in self.products:
+            card = create_card(product)
+            list_layout.addWidget(card)
+            
+        list_layout.addStretch()
+        
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { border: none; background-color: #FFFFFF;}")
         scroll.setWidget(container)
         
-        main_layout.addWidget(scroll)
-        
-        self.setCentralWidget(main_widget)
+        self.catalog_scroll.setWidget(scroll)
 
     def setup_role_interface(self):
         if self.role_id == 1:
