@@ -17,17 +17,33 @@ def create_card(product):
     
     card = QWidget()
     card.setObjectName("ProductCard")
-    card.setStyleSheet("""
-        #ProductCard {
-            background-color: #FFFFFF;
-            border: 2px solid #70B2AF;
-        }
-        #ProductCard QLabel {
-            color: #000000;
-            font-family: Calibri;
-            border: none;
-        }
-    """)
+    
+    if total_quantity == 0:
+        card.setStyleSheet("""
+            #ProductCard {
+                background-color: #ADD8E6;
+                border: 2px solid #70B2AF;
+            }
+            #ProductCard QLabel {
+                color: #000000;
+                font-family: Calibri;
+                border: none;
+                background-color: transparent;
+            }
+        """)
+    else:
+        card.setStyleSheet("""
+            #ProductCard {
+                background-color: #FFFFFF;
+                border: 2px solid #70B2AF;
+            }
+            #ProductCard QLabel {
+                color: #000000;
+                font-family: Calibri;
+                border: none;
+                background-color: transparent;
+            }
+        """)
     
     card_layout = QHBoxLayout(card)
     card_layout.setContentsMargins(10, 10, 10, 10)
@@ -41,8 +57,8 @@ def create_card(product):
     else:
         pixmap.load("resources/picture.png")
         
-    image_label.setPixmap(pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-    image_label.setFixedSize(100, 100)
+    image_label.setPixmap(pixmap.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+    image_label.setFixedSize(200, 200)
     image_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
     card_layout.addWidget(image_label)
     
@@ -92,12 +108,15 @@ def create_card(product):
     price_layout.addWidget(old_price_label)
     
     new_price_label = QLabel(f"{final_price:,.0f} ₽".replace(',', ' '))
-    new_price_label.setStyleSheet("color: black; font-weight: bold; font-size: 18px;")
+    
+    if discount > 15:
+        new_price_label.setStyleSheet("color: #2E8B57; font-weight: bold; font-size: 18px;")
+    else:
+        new_price_label.setStyleSheet("color: black; font-weight: bold; font-size: 18px;")
+    
     price_layout.addWidget(new_price_label)
     
-    if discount > 0:
-        old_price_label.show()
-    else:
+    if discount <= 0:
         old_price_label.hide()
     
     right_layout.addLayout(price_layout)
