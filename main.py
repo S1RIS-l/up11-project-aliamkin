@@ -41,8 +41,8 @@ def create_card(product):
     else:
         pixmap.load("resources/picture.png")
         
-    image_label.setPixmap(pixmap.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-    image_label.setFixedSize(200, 200)
+    image_label.setPixmap(pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+    image_label.setFixedSize(100, 100)
     image_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
     card_layout.addWidget(image_label)
     
@@ -87,27 +87,30 @@ def create_card(product):
     
     discount = calculate_discount(old_price, final_price)
     
-    price_label = QLabel(f"{final_price:,.0f} руб.".replace(',', ' '))
+    old_price_label = QLabel(f"<s>{old_price:,.0f} ₽</s>".replace(',', ' '))
+    old_price_label.setStyleSheet("color: red; font-size: 14px;")
+    price_layout.addWidget(old_price_label)
     
-    if discount > 15:
-        price_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #2E8B57;")
+    new_price_label = QLabel(f"{final_price:,.0f} ₽".replace(',', ' '))
+    new_price_label.setStyleSheet("color: black; font-weight: bold; font-size: 18px;")
+    price_layout.addWidget(new_price_label)
+    
+    if discount > 0:
+        old_price_label.show()
     else:
-        price_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #000000;")
-    
-    price_layout.addWidget(price_label)
+        old_price_label.hide()
     
     right_layout.addLayout(price_layout)
     card_layout.addLayout(right_layout)
     
     return card
 
-
 class MainWindow(QMainWindow):
     def __init__(self, role_id=None, full_name=None):
         super().__init__()
         self.role_id = role_id
         self.full_name = full_name
-        self.setWindowTitle("Мир оптики")
+        self.setWindowTitle("МирОптики")
         self.resize(900, 700)
         self.setWindowIcon(QIcon("resources/icon.ico"))
         
@@ -136,16 +139,17 @@ class MainWindow(QMainWindow):
         logo_pixmap = QPixmap("resources/logo.png")
         logo_label.setPixmap(logo_pixmap.scaled(150, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         
+        title_label = QLabel("Мир оптики — Каталог")
+        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #000000;")
+        
         header_layout.addWidget(logo_label)
+        header_layout.addWidget(title_label)
         header_layout.addStretch()
         
         if self.full_name:
             self.name_label = QLabel(f"ФИО: {self.full_name}")
             self.name_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #000000;")
             header_layout.addWidget(self.name_label)
-            
-            spacer = QLabel("  ")
-            header_layout.addWidget(spacer)
         
         self.logout_button = QPushButton("Выход")
         self.logout_button.setStyleSheet("""
@@ -153,7 +157,7 @@ class MainWindow(QMainWindow):
                 background-color: #ff8080;
                 color: #000000;
                 font-family: Calibri;
-                padding: 6px 12px;
+                padding: 8px 16px;
                 border-radius: 0px;
                 font-size: 14px;
             }
@@ -165,11 +169,6 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(self.logout_button)
         
         main_layout.addLayout(header_layout)
-
-        title_label = QLabel("Мир оптики — Каталог")
-        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #000000;")
-        title_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(title_label)
 
         buttons_layout = QHBoxLayout()
         
@@ -221,19 +220,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(scroll)
         
         self.setCentralWidget(main_widget)
-        
 
-    def logout(self):
-        reply = QMessageBox.question(
-            self, "Выход", "Вы уверены, что хотите выйти?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            from login_window import LoginWindow
-            self.login_window = LoginWindow(self.db)
-            self.login_window.show()
-            self.close()
-    
     def setup_role_interface(self):
         if self.role_id == 1:
             self.admin_button.show()
@@ -252,11 +239,21 @@ class MainWindow(QMainWindow):
             self.manager_button.hide()
             self.admin_button.hide()
 
+    def logout(self):
+        reply = QMessageBox.question(
+            self, "Выход", "Вы уверены, что хотите выйти?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            from login_window import LoginWindow
+            self.login_window = LoginWindow(self.db)
+            self.login_window.show()
+            self.close()
+
     def closeEvent(self, event):
         if self.db:
             self.db.close_all()
         event.accept()
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
