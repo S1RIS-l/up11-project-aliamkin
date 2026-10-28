@@ -7,6 +7,11 @@ from database import Database
 from discount import calculate_price
 from login_window import LoginWindow
 
+def calculate_discount(old_price, new_price):
+    if old_price == 0:
+        return 0
+    return (old_price - new_price) / old_price * 100
+
 def create_card(product):
     product_id, name, category, manufacturer, composition, price, image_path, total_quantity = product
     
@@ -31,13 +36,13 @@ def create_card(product):
     image_label = QLabel()
     pixmap = QPixmap()
     
-    if image_path is not None and os.path.exists(f"resources/{image_path}"):
-        pixmap.load(f"resources/{image_path}")
+    if image_path is not None and os.path.exists(f"resources/Images/{image_path}"):
+        pixmap.load(f"resources/Images/{image_path}")
     else:
         pixmap.load("resources/picture.png")
         
-    image_label.setPixmap(pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-    image_label.setFixedSize(100, 100)
+    image_label.setPixmap(pixmap.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+    image_label.setFixedSize(200, 200)
     image_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
     card_layout.addWidget(image_label)
     
@@ -75,12 +80,20 @@ def create_card(product):
     price_layout = QHBoxLayout()
     price_layout.addStretch()
     
-    final_price = calculate_price(product_id, float(price))
+    old_price = float(price)
+    final_price = calculate_price(product_id, old_price)
     if final_price is None:
-        final_price = float(price)
-        
+        final_price = old_price
+    
+    discount = calculate_discount(old_price, final_price)
+    
     price_label = QLabel(f"{final_price:,.0f} руб.".replace(',', ' '))
-    price_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+    
+    if discount > 15:
+        price_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #2E8B57;")
+    else:
+        price_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #000000;")
+    
     price_layout.addWidget(price_label)
     
     right_layout.addLayout(price_layout)
@@ -94,7 +107,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.role_id = role_id
         self.full_name = full_name
-        self.setWindowTitle("МирОптики")
+        self.setWindowTitle("Мир оптики")
         self.resize(900, 700)
         self.setWindowIcon(QIcon("resources/icon.ico"))
         
