@@ -170,7 +170,7 @@ class MainWindow(QMainWindow):
         header_layout.addStretch()
         
         if self.full_name:
-            self.name_label = QLabel(f"ФИО: {self.full_name}")
+            self.name_label = QLabel(f"ФИО: {self.full_name},")
             self.name_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #000000;")
             header_layout.addWidget(self.name_label)
         
@@ -311,7 +311,7 @@ class MainWindow(QMainWindow):
             GROUP BY p.product_id, c.name
             ORDER BY p.price {order}
         """
-        
+
         conn = self.db.get_connection()
         if conn is None:
             return
