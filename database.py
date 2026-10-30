@@ -24,6 +24,7 @@ class Database:
         conn = self.get_connection()
         if conn is None:
             return []
+        
         try:
             cursor = conn.cursor()
             # COALESCE(SUM(si.quantity), 0) — если остатков нет, возвращаем 0
