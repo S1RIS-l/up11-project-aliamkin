@@ -8,16 +8,19 @@ from discount import calculate_price
 from login_window import LoginWindow
 
 def calculate_discount(old_price, new_price):
+    """Процент скидки между старой и новой ценой"""
     if old_price == 0:
         return 0
     return (old_price - new_price) / old_price * 100
 
 def create_card(product):
+    """Карточка товара для каталога"""
     product_id, name, category, manufacturer, composition, price, image_path, total_quantity = product
     
     card = QWidget()
     card.setObjectName("ProductCard")
     
+    # Подсветка если товара нет на складе
     if total_quantity == 0:
         card.setStyleSheet("""
             #ProductCard {
@@ -52,6 +55,7 @@ def create_card(product):
     image_label = QLabel()
     pixmap = QPixmap()
     
+    # Загружает изображение или заглушку, если файла нет
     if image_path is not None and os.path.exists(f"resources/Images/{image_path}"):
         pixmap.load(f"resources/Images/{image_path}")
     else:
@@ -73,6 +77,7 @@ def create_card(product):
     category_label.setStyleSheet("font-size: 14px;")
     right_layout.addWidget(category_label)
     
+    # Отображение кол-ва: много / мало
     if total_quantity is not None and total_quantity > 5:
         qty_text = f"Количество: много ({total_quantity})"
         qty_color = "#000000"
@@ -107,6 +112,7 @@ def create_card(product):
     old_price_label.setStyleSheet("color: red; font-size: 14px;")
     price_layout.addWidget(old_price_label)
     
+    # Цена зелёная, если скидка > 15%, или чёрная если нет
     new_price_label = QLabel(f"{final_price:,.0f} ₽".replace(',', ' '))
     
     if discount > 15:
@@ -116,6 +122,7 @@ def create_card(product):
     
     price_layout.addWidget(new_price_label)
     
+    # Скрываем старую цену, если скидки нет
     if discount <= 0:
         old_price_label.hide()
     
@@ -147,6 +154,7 @@ class MainWindow(QMainWindow):
         self.setup_role_interface()
 
     def setup_ui(self):
+        """Интерфейс главного окна"""
         main_widget = QWidget()
         main_layout = QVBoxLayout(main_widget)
         main_layout.setContentsMargins(10, 10, 10, 10)
@@ -204,6 +212,7 @@ class MainWindow(QMainWindow):
         
         self.filter_combo = QComboBox()
         self.filter_combo.addItem("Все категории")
+        # Заполняем выпадающий список категориями из БД
         categories = self.db.get_categories()
         for cat in categories:
             self.filter_combo.addItem(cat[0])
@@ -271,6 +280,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(main_widget)
 
     def load_products(self):
+        """Перестраивает каталог с учётом сортировки, фильтра и поиска"""
         search = self.search_input.text()
         category = self.filter_combo.currentText()
         sort = self.sort_combo.currentText()
@@ -282,6 +292,7 @@ class MainWindow(QMainWindow):
         else:
             order = "DESC"
         
+        # Фильтр по категории и поиск без учёта регистра
         query = f"""
             SELECT 
                 p.product_id, 
@@ -315,6 +326,7 @@ class MainWindow(QMainWindow):
         self.refresh_catalog()
 
     def refresh_catalog(self):
+        """Обновление каталога после фильтрации/поиска"""
         container = QWidget()
         container.setStyleSheet("background-color: #FFFFFF;")
         list_layout = QVBoxLayout(container)
@@ -335,24 +347,30 @@ class MainWindow(QMainWindow):
         self.catalog_scroll.setWidget(scroll)
 
     def setup_role_interface(self):
+        """Кнопки в зависимости от роли."""
         if self.role_id == 1:
+            # Администратор видит все кнопки
             self.admin_button.show()
             self.manager_button.show()
             self.order_button.hide()
         elif self.role_id == 2:
+            # Менеджер видит только заказы
             self.admin_button.hide()
             self.manager_button.show()
             self.order_button.hide()
         elif self.role_id == 3:
+            # Пользователь видит только оформление заказа
             self.admin_button.hide()
             self.manager_button.hide()
             self.order_button.show()
         else:
+            # Гость не видит кнопок
             self.order_button.hide()
             self.manager_button.hide()
             self.admin_button.hide()
 
     def logout(self):
+        """Выход с подтверждением"""
         reply = QMessageBox.question(
             self, "Выход", "Вы уверены, что хотите выйти?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
@@ -364,8 +382,6 @@ class MainWindow(QMainWindow):
             self.close()
 
     def closeEvent(self, event):
-        if self.db:
-            self.db.close_all()
         event.accept()
 
 if __name__ == "__main__":
@@ -375,4 +391,6 @@ if __name__ == "__main__":
     login_window = LoginWindow(db)
     login_window.show()
     
-    sys.exit(app.exec())
+    exit_code = app.exec()
+    db.close_all()
+    sys.exit(exit_code)

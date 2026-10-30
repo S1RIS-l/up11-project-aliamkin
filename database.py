@@ -20,11 +20,13 @@ class Database:
             self.connection_pool = None
 
     def get_products(self):
+        """Список всех товаров с категорией и суммарным остатком"""
         conn = self.get_connection()
         if conn is None:
             return []
         try:
             cursor = conn.cursor()
+            # COALESCE(SUM(si.quantity), 0) — если остатков нет, возвращаем 0
             query = """
                 SELECT 
                     p.product_id, 
@@ -49,6 +51,7 @@ class Database:
             self.release_connection(conn)
 
     def get_categories(self):
+        """Список категорий для фильтра"""
         conn = self.get_connection()
         if conn is None:
             return []
@@ -62,14 +65,17 @@ class Database:
             self.release_connection(conn)
     
     def get_connection(self):
+        """Берёт соединение из пула"""
         if self.connection_pool is None:
             return None
         return self.connection_pool.getconn()
 
     def release_connection(self, conn):
+        """Возвращает соединение обратно в пул"""
         if self.connection_pool is not None and conn is not None:
             self.connection_pool.putconn(conn)
 
     def close_all(self):
+        """Закрывает пул соединений (при полном выходе из окна)"""
         if self.connection_pool is not None:
             self.connection_pool.closeall()

@@ -53,13 +53,14 @@ class LoginWindow(QWidget):
         self.login_button.clicked.connect(self.check_login)
         layout.addWidget(self.login_button)
         
-        self.cancel_button = QPushButton("Отмена")
-        self.cancel_button.clicked.connect(self.close)
+        self.cancel_button = QPushButton("Войти как гость")
+        self.cancel_button.clicked.connect(self.login_as_guest)
         layout.addWidget(self.cancel_button)
         
         self.setLayout(layout)
 
     def check_login(self):
+        """Проверяет логин в БД и открывает главное окно если правильный"""
         login = self.login_input.text().strip()
         
         if not login:
@@ -87,22 +88,22 @@ class LoginWindow(QWidget):
                 self.role_id = result[1]
                 last_name = result[2]
                 first_name = result[3]
+                # Если отчество не указано, используем пустую строку
                 middle_name = result[4] if result[4] else ""
                 self.full_name = f"{last_name} {first_name} {middle_name}".strip()
                 self.open_main_window()
         finally:
             self.db.release_connection(conn)
     
+    def login_as_guest(self):
+        """Вход за гостя"""
+        self.role_id = None
+        self.full_name = "Гость"
+        self.open_main_window()
+    
     def open_main_window(self):
+        """Открывает главное окно и закрывает окно входа"""
         from main import MainWindow
         self.main_window = MainWindow(role_id=self.role_id, full_name=self.full_name)
         self.main_window.show()
         self.close()
-
-    
-    def closeEvent(self, event):
-        if self.main_window is None:
-            from main import MainWindow
-            self.main_window = MainWindow(role_id=None, full_name="Гость")
-            self.main_window.show()
-        event.accept()
