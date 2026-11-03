@@ -82,7 +82,7 @@ class LoginWindow(QWidget):
             cursor.close()
             
             if result is None:
-                QMessageBox.warning(self, "Ошибка", "Неверный логин")
+                QMessageBox.warning(self, "Ошибка", "Пользователь не найден")
             else:
                 self.user_id = result[0]
                 self.role_id = result[1]

@@ -1,4 +1,4 @@
-#комментарий
+#комментарий.
 import sys
 import os
 from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton, QMessageBox, QComboBox, QLineEdit)
