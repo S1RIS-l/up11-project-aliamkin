@@ -400,18 +400,18 @@ class MainWindow(QMainWindow):
             self.admin_button.hide()
 
     def logout(self):
-        reply = QMessageBox.question(
-            self, "Выход", "Вы уверены, что хотите выйти?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            from login_window import LoginWindow
-            self.login_window = LoginWindow(self.db)
-            self.login_window.show()
-            self.close()
+        self.close()
 
     def closeEvent(self, event):
-        event.accept()
+        reply = QMessageBox.warning(
+            self, "Выход", "Вы уверены, что хотите выйти?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            event.accept()
+        else:
+            event.ignore()
 
 if __name__ == "__main__":
     from login_window import LoginWindow

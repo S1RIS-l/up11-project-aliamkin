@@ -60,11 +60,11 @@ class LoginWindow(QWidget):
         self.setLayout(layout)
 
     def check_login(self):
-        """Проверяет логин в БД и открывает главное окно если правильный"""
+        """Проверяет логин в БД и открывает главное окно при успехе."""
         login = self.login_input.text().strip()
         
         if not login:
-            QMessageBox.warning(self, "Ошибка", "Введите логин")
+            QMessageBox.critical(self, "Ошибка", "Введите логин")
             return
         
         conn = self.db.get_connection()
@@ -82,27 +82,29 @@ class LoginWindow(QWidget):
             cursor.close()
             
             if result is None:
-                QMessageBox.warning(self, "Ошибка", "Пользователь не найден")
+                QMessageBox.critical(self, "Ошибка", "Пользователь не найден")
             else:
                 self.user_id = result[0]
                 self.role_id = result[1]
                 last_name = result[2]
                 first_name = result[3]
-                # Если отчество не указано, используем пустую строку
                 middle_name = result[4] if result[4] else ""
                 self.full_name = f"{last_name} {first_name} {middle_name}".strip()
+                
+                QMessageBox.information(self, "Информация", f"Добро пожаловать, {self.full_name}!")
+                
                 self.open_main_window()
         finally:
             self.db.release_connection(conn)
     
     def login_as_guest(self):
-        """Вход за гостя"""
+        """Вход без авторизации (роль «гость»)."""
         self.role_id = None
         self.full_name = "Гость"
         self.open_main_window()
     
     def open_main_window(self):
-        """Открывает главное окно и закрывает окно входа"""
+        """Открывает главное окно и закрывает окно входа."""
         from main import MainWindow
         self.main_window = MainWindow(role_id=self.role_id, full_name=self.full_name)
         self.main_window.show()
