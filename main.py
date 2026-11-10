@@ -6,10 +6,12 @@ from PySide6.QtCore import Qt
 from database import Database
 from discount import calculate_price
 
+
 def calculate_discount(old_price, new_price):
     if old_price == 0:
         return 0
     return (old_price - new_price) / old_price * 100
+
 
 def create_card(product):
     product_id, name, category, manufacturer, composition, price, image_path, total_quantity = product
@@ -123,6 +125,7 @@ def create_card(product):
     
     return card
 
+
 class MainWindow(QMainWindow):
     def __init__(self, role_id=None, full_name=None):
         super().__init__()
@@ -201,13 +204,13 @@ class MainWindow(QMainWindow):
         
         self.product_page = QWidget()
         product_layout = QVBoxLayout()
-        product_layout.addWidget(QLabel("Карточка товара"))
+        product_layout.addWidget(QLabel("Карточка товара (в разработке)"))
         self.product_page.setLayout(product_layout)
         self.stacked_widget.addWidget(self.product_page)
         
         self.orders_page = QWidget()
         orders_layout = QVBoxLayout()
-        orders_layout.addWidget(QLabel("Заказы"))
+        orders_layout.addWidget(QLabel("Заказы (в разработке)"))
         self.orders_page.setLayout(orders_layout)
         self.stacked_widget.addWidget(self.orders_page)
         
@@ -326,7 +329,7 @@ class MainWindow(QMainWindow):
             self.refresh_catalog()
 
     def load_products(self):
-        search = self.search_input.text()
+        search = self.search_input.text().strip()
         category = self.filter_combo.currentText()
         sort = self.sort_combo.currentText()
         
@@ -350,7 +353,7 @@ class MainWindow(QMainWindow):
             FROM products p
             JOIN categories c ON p.category_id = c.category_id
             LEFT JOIN stock_items si ON p.product_id = si.product_id
-            WHERE (p.name ILIKE %s OR p.description ILIKE %s)
+            WHERE (p.name ILIKE %s OR p.description ILIKE %s OR p.manufacturer ILIKE %s)
             AND (c.name = %s OR %s = 'Все категории')
             GROUP BY p.product_id, c.name
             ORDER BY p.price {order}
@@ -361,7 +364,7 @@ class MainWindow(QMainWindow):
             return
         try:
             cursor = conn.cursor()
-            cursor.execute(query, (search_pattern, search_pattern, category, category))
+            cursor.execute(query, (search_pattern, search_pattern, search_pattern, category, category))
             self.products = cursor.fetchall()
             cursor.close()
         finally:
@@ -412,6 +415,7 @@ class MainWindow(QMainWindow):
             event.accept()
         else:
             event.ignore()
+
 
 if __name__ == "__main__":
     from login_window import LoginWindow
