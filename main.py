@@ -1,6 +1,9 @@
 import sys
 import os
-from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton, QMessageBox, QComboBox, QLineEdit, QStackedWidget)
+from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, 
+                               QWidget, QScrollArea, QHBoxLayout, QPushButton, 
+                               QMessageBox, QComboBox, QLineEdit, QStackedWidget,
+                               QDialog)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
@@ -13,7 +16,17 @@ def calculate_discount(old_price, new_price):
     return (old_price - new_price) / old_price * 100
 
 
-def create_card(product):
+def load_product_pixmap(image_path, fallback="resources/picture.png"):
+    pixmap = QPixmap(image_path) if image_path else QPixmap()
+    if pixmap.isNull():
+        pixmap = QPixmap(fallback)
+    if pixmap.isNull():
+        pixmap = QPixmap(160, 120)
+        pixmap.fill(Qt.GlobalColor.lightGray)
+    return pixmap
+
+
+def create_card(product, on_click=None):
     product_id, name, category, manufacturer, composition, price, image_path, total_quantity = product
     
     card = QWidget()
@@ -123,8 +136,56 @@ def create_card(product):
     right_layout.addLayout(price_layout)
     card_layout.addLayout(right_layout)
     
+    if on_click:
+        card.mousePressEvent = lambda event, pid=product_id: on_click(pid)
+    
     return card
 
+
+class ProductCard(QDialog):
+    def __init__(self, product_id, parent=None):
+        super().__init__(parent)
+        self.product_id = product_id
+        self.db = parent.db if parent is not None else None
+        self.setWindowTitle("Карточка товара")
+        self.resize(200, 300)
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        self.image_label = QLabel()
+        self.image_label.setPixmap(load_product_pixmap(None))
+        self.image_label.setAlignment(Qt.AlignCenter)
+
+        self.name_label = QLabel(f"Товар ID {self.product_id}")
+
+        self.name_label.setStyleSheet("font-weight: bold; font-size: 16px;")
+
+        self.price_label = QLabel("Данные будут загружены в РТ 17")
+        self.price_label.setStyleSheet("font-size: 14px;")
+
+        self.description_label = QLabel("Описание")
+        self.description_label.setWordWrap(True)
+        self.description_label.setStyleSheet("font-size: 14px;")
+
+        self.size_combo = QComboBox()
+        self.variant_combo = self.size_combo
+
+        self.add_button = QPushButton("В корзину")
+        self.add_button.clicked.connect(self.add_selected_to_cart)
+
+        layout.addWidget(self.image_label)
+        layout.addWidget(self.name_label)
+        layout.addWidget(self.price_label)
+        layout.addWidget(self.description_label)
+        layout.addWidget(self.size_combo)
+        layout.addWidget(self.add_button)
+
+    def add_selected_to_cart(self):
+        QMessageBox.information(
+            self, "!!!", "Корзина будет подключена в РТ 19"
+        )
 
 class MainWindow(QMainWindow):
     def __init__(self, role_id=None, full_name=None):
@@ -147,6 +208,11 @@ class MainWindow(QMainWindow):
         
         self.setup_ui()
         self.setup_role_interface()
+
+    def open_product_card(self, product_id):
+        card = ProductCard(product_id, self)
+        card.exec()
+        self.load_products()
 
     def setup_ui(self):
         main_widget = QWidget()
@@ -258,7 +324,7 @@ class MainWindow(QMainWindow):
         controls_layout.addWidget(self.filter_combo)
         
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Поиск....")
+        self.search_input.setPlaceholderText("Поиск...")
         self.search_input.textChanged.connect(self.load_products)
         controls_layout.addWidget(QLabel("Поиск:"))
         controls_layout.addWidget(self.search_input)
@@ -302,7 +368,7 @@ class MainWindow(QMainWindow):
         self.list_layout.setContentsMargins(0, 0, 0, 0)
         
         for product in self.products:
-            card = create_card(product)
+            card = create_card(product, on_click=self.open_product_card)
             self.list_layout.addWidget(card)
             
         self.list_layout.addStretch()
@@ -379,7 +445,7 @@ class MainWindow(QMainWindow):
                 widget.deleteLater()
         
         for product in self.products:
-            card = create_card(product)
+            card = create_card(product, on_click=self.open_product_card)
             self.list_layout.addWidget(card)
             
         self.list_layout.addStretch()
