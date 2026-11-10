@@ -2,6 +2,13 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QLineEdit, QPushBut
 from PySide6.QtGui import QIcon
 import os
 
+def validate_login(raw):
+    login = raw.strip()
+    if not login:
+        return None, "Введите логин (пробелы не считаются)"
+    if len(login) < 3:
+        return None, "Логин должен содержать минимум 3 символа"
+    return login, None
 class LoginWindow(QWidget):
     def __init__(self, db):
         super().__init__()
@@ -60,11 +67,11 @@ class LoginWindow(QWidget):
         self.setLayout(layout)
 
     def check_login(self):
-        """Проверяет логин в БД и открывает главное окно при успехе."""
-        login = self.login_input.text().strip()
+        """Проверяет логин в БД и открывает главное окно при успехе"""
+        login, error = validate_login(self.login_input.text())
         
-        if not login:
-            QMessageBox.critical(self, "Ошибка", "Введите логин")
+        if error:
+            QMessageBox.critical(self, "Ошибка", error)
             return
         
         conn = self.db.get_connection()
