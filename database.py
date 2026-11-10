@@ -58,7 +58,7 @@ class Database:
             return []
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT name FROM categories ORDER BY name")
+            cursor.execute("SELECT DISTINCT name FROM categories ORDER BY name")
             categories = cursor.fetchall()
             cursor.close()
             return categories

@@ -258,7 +258,7 @@ class MainWindow(QMainWindow):
         controls_layout.addWidget(self.filter_combo)
         
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Поиск...")
+        self.search_input.setPlaceholderText("Поиск....")
         self.search_input.textChanged.connect(self.load_products)
         controls_layout.addWidget(QLabel("Поиск:"))
         controls_layout.addWidget(self.search_input)
