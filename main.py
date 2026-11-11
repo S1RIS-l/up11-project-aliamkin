@@ -1,9 +1,6 @@
 import sys
 import os
-from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, 
-                               QWidget, QScrollArea, QHBoxLayout, QPushButton, 
-                               QMessageBox, QComboBox, QLineEdit, QStackedWidget,
-                               QDialog, QSpinBox)
+from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton, QMessageBox, QComboBox, QLineEdit, QStackedWidget, QDialog, QSpinBox, QFileDialog)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
@@ -58,6 +55,8 @@ def create_card(product, on_click=None):
     
     if image_path is not None and os.path.exists(f"resources/Images/{image_path}"):
         pixmap.load(f"resources/Images/{image_path}")
+    elif image_path is not None and os.path.exists(image_path):
+        pixmap.load(image_path)
     else:
         pixmap.load("resources/picture.png")
         
@@ -139,7 +138,7 @@ class ProductCard(QDialog):
         self.db = parent.db if parent is not None else None
         self.product = {}
         self.setWindowTitle("Карточка товара")
-        self.resize(400, 500)
+        self.resize(400, 600)
         self.setup_ui()
         self.load_product(product_id)
 
@@ -148,12 +147,13 @@ class ProductCard(QDialog):
 
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setFixedHeight(300)
 
         self.name_label = QLabel()
-        self.name_label.setStyleSheet("font-size: 16px;")
+        self.name_label.setStyleSheet("font-weight: bold; font-size: 16px;")
 
         self.price_label = QLabel()
-        self.price_label.setStyleSheet("font-size: 16px; color: #2E8B57; font-weight: bold;")
+        self.price_label.setTextFormat(Qt.RichText)
 
         self.description_label = QLabel()
         self.description_label.setWordWrap(True)
@@ -162,22 +162,26 @@ class ProductCard(QDialog):
         self.size_combo = QComboBox()
         self.variant_combo = self.size_combo
         self.size_combo.currentIndexChanged.connect(self.on_variant_changed)
-        layout.addWidget(QLabel("Вариант:"))
-        layout.addWidget(self.size_combo)
 
         self.quantity_spin = QSpinBox()
         self.quantity_spin.setMinimum(1)
-        layout.addWidget(QLabel("Количество:"))
-        layout.addWidget(self.quantity_spin)
 
         self.add_button = QPushButton("В корзину")
         self.add_button.clicked.connect(self.add_selected_to_cart)
+
+        self.load_image_button = QPushButton("Загрузить изображение")
+        self.load_image_button.clicked.connect(self.load_image)
 
         layout.addWidget(self.image_label)
         layout.addWidget(self.name_label)
         layout.addWidget(self.price_label)
         layout.addWidget(self.description_label)
+        layout.addWidget(QLabel("Вариант:"))
+        layout.addWidget(self.size_combo)
+        layout.addWidget(QLabel("Количество:"))
+        layout.addWidget(self.quantity_spin)
         layout.addWidget(self.add_button)
+        layout.addWidget(self.load_image_button)
 
     def load_product(self, product_id):
         self.product_id = product_id
@@ -199,23 +203,29 @@ class ProductCard(QDialog):
             name, price, description, image_path = product
             self.product = {"name": name, "price": price}
             self.name_label.setText(name)
-
+            
             old_price = float(price)
             final_price = calculate_price(product_id, old_price)
             if final_price is None:
                 final_price = old_price
+
             discount = calculate_discount(old_price, final_price)
+
             if discount > 0:
                 self.price_label.setText(
-                    f"<s style='color:red; font-size:15px; font-weight:normal; '>{old_price:,.0f} ₽</s>  "
-                    f"<span style='color:#2E8B57; font-size:16px; font-weight:bold;'>{final_price:,.0f} ₽</span>"
+                    f"<s style='color:red; font-size:14px; font-weight:normal;'>{old_price:,.0f} ₽</s>  "
+                    f"<span style='color:#2E8B57; font-size:18px; font-weight:bold;'>{final_price:,.0f} ₽</span>"
                 )
             else:
-                self.price_label.setText(f"{old_price:,.0f} ₽")
-            self.description_label.setText(description.replace(". ", ".\n") if description else "")
+                self.price_label.setText(f"<span style='font-size:18px;'>{old_price:,.0f} ₽</span>")
+            
+            formatted_description = description.replace(". ", ".\n") if description else ""
+            self.description_label.setText(formatted_description)
             
             if image_path and os.path.exists(f"resources/Images/{image_path}"):
                 pixmap = QPixmap(f"resources/Images/{image_path}")
+            elif image_path and os.path.exists(image_path):
+                pixmap = QPixmap(image_path)
             else:
                 pixmap = QPixmap("resources/picture.png")
             self.image_label.setPixmap(pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -246,8 +256,60 @@ class ProductCard(QDialog):
             QMessageBox.warning(self, "Остаток", "Нет доступного остатка")
             return
         QMessageBox.information(
-            self, "!!!", "Корзина будет подключена в РТ 19"
+            self, "Этап разработки", "Корзина будет подключена в РТ 19"
         )
+
+    def load_image(self):
+        import shutil
+        import uuid
+        from pathlib import Path
+        from PySide6.QtCore import QStandardPaths
+        import psycopg
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Выберите изображение", "", "Images (*.png *.jpg *.jpeg)"
+        )
+        if not file_path:
+            return
+
+        if QPixmap(file_path).isNull():
+            QMessageBox.warning(self, "Изображение", "Файл не является изображением")
+            return
+
+        base = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.AppLocalDataLocation
+        )
+        target = Path(base) / "images" / (uuid.uuid4().hex + Path(file_path).suffix)
+
+        conn = self.db.get_connection()
+        if conn is None:
+            QMessageBox.critical(self, "Ошибка", "Нет подключения к БД")
+            return
+
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(file_path, target)
+
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE products SET image_path = %s WHERE product_id = %s",
+                (str(target), self.product_id)
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Товар не найден")
+            conn.commit()
+            cursor.close()
+
+        except (OSError, psycopg.Error, ValueError) as error:
+            conn.rollback()
+            if target.exists():
+                target.unlink()
+            QMessageBox.critical(self, "Изображение не сохранено", str(error))
+            return
+        finally:
+            self.db.release_connection(conn)
+
+        self.load_product(self.product_id)
 
 
 class MainWindow(QMainWindow):
