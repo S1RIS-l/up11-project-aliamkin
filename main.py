@@ -1,11 +1,11 @@
 import sys
 import os
-from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton, QMessageBox, QComboBox, QLineEdit, QStackedWidget, QDialog, QSpinBox, QFileDialog)
+from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton, QMessageBox, QComboBox, QLineEdit, QStackedWidget, QDialog, QSpinBox, QFileDialog, QTableWidget, QTableWidgetItem)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
 from discount import calculate_price
-
+from decimal import Decimal
 
 def calculate_discount(old_price, new_price):
     if old_price == 0:
@@ -136,6 +136,7 @@ class ProductCard(QDialog):
         super().__init__(parent)
         self.product_id = product_id
         self.db = parent.db if parent is not None else None
+        self.main_window = parent
         self.product = {}
         self.setWindowTitle("Карточка товара")
         self.resize(400, 600)
@@ -255,9 +256,13 @@ class ProductCard(QDialog):
         if not selected or self.quantity_spin.value() <= 0:
             QMessageBox.warning(self, "Остаток", "Нет доступного остатка")
             return
-        QMessageBox.information(
-            self, "Этап разработки", "Корзина будет подключена в РТ 19"
-        )
+        variant_id, available = selected
+        if self.main_window is not None and hasattr(self.main_window, "add_to_cart"):
+            self.main_window.add_to_cart(
+                self.product_id, variant_id, self.product["name"],
+                self.quantity_spin.value(), self.product["price"]
+            )
+        self.close()
 
     def load_image(self):
         import shutil
@@ -339,6 +344,28 @@ class MainWindow(QMainWindow):
         card.exec()
         self.load_products()
 
+    def add_to_cart(self, product_id, variant_id, name, quantity, price):
+        if quantity <= 0:
+            QMessageBox.warning(self, "Количество", "Выберите количество больше 0")
+            return
+
+        price = Decimal(str(price))
+        row = self.cart_table.rowCount()
+        self.cart_table.insertRow(row)
+        self.cart_table.setItem(row, 0, QTableWidgetItem(name))
+        self.cart_table.setItem(row, 1, QTableWidgetItem(str(quantity)))
+        self.cart_table.setItem(row, 2, QTableWidgetItem(str(price)))
+        self.cart_table.setItem(row, 3, QTableWidgetItem(str(quantity * price)))
+
+        identity = QTableWidgetItem(str(product_id))
+        identity.setData(Qt.ItemDataRole.UserRole, variant_id)
+        self.cart_table.setItem(row, 4, identity)
+
+    def remove_from_cart(self):
+        row = self.cart_table.currentRow()
+        if row >= 0:
+            self.cart_table.removeRow(row)
+
     def setup_ui(self):
         main_widget = QWidget()
         main_layout = QVBoxLayout(main_widget)
@@ -393,22 +420,57 @@ class MainWindow(QMainWindow):
         self.setup_catalog_page()
         self.stacked_widget.addWidget(self.catalog_page)
         
-        self.product_page = QWidget()
-        product_layout = QVBoxLayout()
-        product_layout.addWidget(QLabel("Карточка товара (в разработке)"))
-        self.product_page.setLayout(product_layout)
-        self.stacked_widget.addWidget(self.product_page)
+        self.cart_page = QWidget()
+        cart_layout = QVBoxLayout(self.cart_page)
         
-        self.orders_page = QWidget()
-        orders_layout = QVBoxLayout()
-        orders_layout.addWidget(QLabel("Заказы (в разработке)"))
-        self.orders_page.setLayout(orders_layout)
-        self.stacked_widget.addWidget(self.orders_page)
+        self.cart_table = QTableWidget()
+        self.cart_table.setColumnCount(5)
+        self.cart_table.setHorizontalHeaderLabels(["Наименование", "Количество", "Цена", "Сумма", "ID"])
+        self.cart_table.setColumnHidden(4, True)
+        cart_layout.addWidget(self.cart_table)
+        
+        self.remove_button = QPushButton("Удалить из корзины")
+        self.remove_button.setStyleSheet("""
+            QPushButton {
+                background-color: #70B2AF;
+                color: #000000;
+                font-family: Calibri;
+                padding: 8px 16px;
+                border-radius: 0px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #D2F6E7;
+            }
+        """)
+        self.remove_button.clicked.connect(self.remove_from_cart)
+        cart_layout.addWidget(self.remove_button)
+        
+        self.stacked_widget.addWidget(self.cart_page)
         
         self.stacked_widget.setCurrentIndex(0)
         
         main_layout.addWidget(self.stacked_widget)
 
+        buttons_layout = QHBoxLayout()
+        
+        self.cart_button = QPushButton("Корзина")
+        self.cart_button.setStyleSheet("""
+            QPushButton {
+                background-color: #70B2AF;
+                color: #000000;
+                font-family: Calibri;
+                padding: 8px 16px;
+                border-radius: 0px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #D2F6E7;
+            }
+        """)
+        self.cart_button.clicked.connect(lambda: self.switch_page(1))
+        buttons_layout.addWidget(self.cart_button)
+        
         self.back_button = QPushButton("Назад")
         self.back_button.setStyleSheet("""
             QPushButton {
@@ -424,7 +486,9 @@ class MainWindow(QMainWindow):
             }
         """)
         self.back_button.clicked.connect(self.go_back)
-        main_layout.addWidget(self.back_button)
+        buttons_layout.addWidget(self.back_button)
+        
+        main_layout.addLayout(buttons_layout)
 
         self.setCentralWidget(main_widget)
 
@@ -513,7 +577,7 @@ class MainWindow(QMainWindow):
     def switch_page(self, index):
         self.stacked_widget.setCurrentIndex(index)
         
-        titles = ["Мир Оптики — Каталог", "Мир Оптики — Карточка товара", "Мир Оптики — Заказы"]
+        titles = ["Мир Оптики — Каталог", "Мир Оптики — Корзина"]
         self.title_label.setText(titles[index])
         
         if index == 0:
