@@ -1,6 +1,6 @@
 import sys
 import os
-from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton, QMessageBox, QComboBox, QLineEdit, QStackedWidget, QDialog, QSpinBox, QFileDialog, QTableWidget, QTableWidgetItem)
+from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton, QMessageBox, QComboBox, QLineEdit, QStackedWidget,QDialog, QSpinBox, QFileDialog, QTableWidget, QTableWidgetItem, QInputDialog)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
@@ -361,10 +361,60 @@ class MainWindow(QMainWindow):
         identity.setData(Qt.ItemDataRole.UserRole, variant_id)
         self.cart_table.setItem(row, 4, identity)
 
+        self.update_total()
+
     def remove_from_cart(self):
         row = self.cart_table.currentRow()
         if row >= 0:
             self.cart_table.removeRow(row)
+            self.update_total()
+
+    def change_quantity(self, new_quantity):
+        row = self.cart_table.currentRow()
+        if row >= 0:
+            if not isinstance(new_quantity, int) or new_quantity <= 0:
+                QMessageBox.warning(self, "Количество", "Количество должно быть целым и больше 0")
+                return
+            price = Decimal(self.cart_table.item(row, 2).text())
+            self.cart_table.setItem(row, 1, QTableWidgetItem(str(new_quantity)))
+            self.cart_table.setItem(row, 3, QTableWidgetItem(str(new_quantity * price)))
+            self.update_total()
+
+    def on_change_quantity_clicked(self):
+        row = self.cart_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Корзина", "Выберите строку для изменения")
+            return
+        current = int(self.cart_table.item(row, 1).text())
+        new_quantity, ok = QInputDialog.getInt(
+            self, "Изменить количество", "Новое количество:", current, 1, 999
+        )
+        if ok:
+            self.change_quantity(new_quantity)
+
+    def update_total(self):
+        for row in range(self.cart_table.rowCount()):
+            item = self.cart_table.item(row, 0)
+            if item and item.text() == "Итого:":
+                self.cart_table.removeRow(row)
+                break
+
+        total = Decimal("0")
+        for row in range(self.cart_table.rowCount()):
+            item = self.cart_table.item(row, 3)
+            if item and item.text():
+                total += Decimal(item.text())
+
+        row = self.cart_table.rowCount()
+        self.cart_table.insertRow(row)
+        self.cart_table.setItem(row, 0, QTableWidgetItem("Итого:"))
+        self.cart_table.setItem(row, 3, QTableWidgetItem(f"{total} ₽"))
+
+    def checkout(self):
+        if self.cart_table.rowCount() == 0:
+            QMessageBox.warning(self, "Корзина", "Корзина пуста")
+            return
+        QMessageBox.information(self, "Заказ", "Оформление заказа будет реализовано в РТ 21")
 
     def setup_ui(self):
         main_widget = QWidget()
@@ -428,6 +478,23 @@ class MainWindow(QMainWindow):
         self.cart_table.setHorizontalHeaderLabels(["Наименование", "Количество", "Цена", "Сумма", "ID"])
         self.cart_table.setColumnHidden(4, True)
         cart_layout.addWidget(self.cart_table)
+        
+        self.change_button = QPushButton("Изменить количество")
+        self.change_button.setStyleSheet("""
+            QPushButton {
+                background-color: #70B2AF;
+                color: #000000;
+                font-family: Calibri;
+                padding: 8px 16px;
+                border-radius: 0px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #D2F6E7;
+            }
+        """)
+        self.change_button.clicked.connect(self.on_change_quantity_clicked)
+        cart_layout.addWidget(self.change_button)
         
         self.remove_button = QPushButton("Удалить из корзины")
         self.remove_button.setStyleSheet("""
