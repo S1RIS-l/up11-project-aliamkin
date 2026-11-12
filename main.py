@@ -318,10 +318,11 @@ class ProductCard(QDialog):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, role_id=None, full_name=None):
+    def __init__(self, role_id=None, full_name=None, user_id=None):
         super().__init__()
         self.role_id = role_id
         self.full_name = full_name
+        self.user_id = user_id
         self.setWindowTitle("Мир Оптики")
         self.resize(900, 700)
         self.setWindowIcon(QIcon("resources/icon.ico"))
@@ -410,11 +411,51 @@ class MainWindow(QMainWindow):
         self.cart_table.setItem(row, 0, QTableWidgetItem("Итого:"))
         self.cart_table.setItem(row, 3, QTableWidgetItem(f"{total} ₽"))
 
-    def checkout(self):
-        if self.cart_table.rowCount() == 0:
-            QMessageBox.warning(self, "Корзина", "Корзина пуста")
+    def confirm_order(self):
+        from datetime import date
+        
+        if self.cart_table.rowCount() == 0 or (self.cart_table.rowCount() == 1 and self.cart_table.item(0, 0).text() == "Итого:"):
+            QMessageBox.warning(self, "Ошибка", "Корзина пуста")
             return
-        QMessageBox.information(self, "Заказ", "Оформление заказа будет реализовано в РТ 21")
+        
+        conn = self.db.get_connection()
+        if conn is None:
+            QMessageBox.critical(self, "Ошибка", "Нет подключения к БД")
+            return
+        
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO orders (order_date, user_id, status) VALUES (%s, %s, %s) RETURNING order_id",
+                (date.today(), self.user_id, "Новый")
+            )
+            order_id = cursor.fetchone()[0]
+            
+            for row in range(self.cart_table.rowCount()):
+                item_name = self.cart_table.item(row, 0)
+                if item_name and item_name.text() == "Итого:":
+                    continue
+                product_id = int(self.cart_table.item(row, 4).text())
+                variant_id = int(self.cart_table.item(row, 4).data(Qt.ItemDataRole.UserRole))
+                quantity = int(self.cart_table.item(row, 1).text())
+                price = float(self.cart_table.item(row, 2).text())
+                cursor.execute(
+                    "INSERT INTO order_items (order_id, product_id, variant_id, quantity, price) VALUES (%s, %s, %s, %s, %s)",
+                    (order_id, product_id, variant_id, quantity, price)
+                )
+            
+            conn.commit()
+            cursor.close()
+            
+            QMessageBox.information(self, "Успех", "Заказ оформлен")
+            self.cart_table.setRowCount(0)
+            self.update_total()
+            
+        except Exception as e:
+            conn.rollback()
+            QMessageBox.critical(self, "Ошибка", f"Ошибка: {e}")
+        finally:
+            self.db.release_connection(conn)
 
     def setup_ui(self):
         main_widget = QWidget()
@@ -512,6 +553,23 @@ class MainWindow(QMainWindow):
         """)
         self.remove_button.clicked.connect(self.remove_from_cart)
         cart_layout.addWidget(self.remove_button)
+        
+        self.confirm_button = QPushButton("Подтвердить заказ")
+        self.confirm_button.setStyleSheet("""
+            QPushButton {
+                background-color: #70B2AF;
+                color: #000000;
+                font-family: Calibri;
+                padding: 8px 16px;
+                border-radius: 0px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #D2F6E7;
+            }
+        """)
+        self.confirm_button.clicked.connect(self.confirm_order)
+        cart_layout.addWidget(self.confirm_button)
         
         self.stacked_widget.addWidget(self.cart_page)
         
