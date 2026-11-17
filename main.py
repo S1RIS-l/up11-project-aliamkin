@@ -12,7 +12,6 @@ from PySide6.QtCore import Qt
 from database import Database
 from discount import calculate_price
 
-
 def calculate_discount(old_price, new_price):
     if old_price == 0:
         return 0
@@ -145,7 +144,7 @@ class ProductCard(QDialog):
         self.main_window = parent
         self.product = {}
         self.setWindowTitle("Карточка товара")
-        self.resize(400, 600)
+        self.resize(400, 650)
         self.setup_ui()
         self.load_product(product_id)
 
@@ -179,6 +178,22 @@ class ProductCard(QDialog):
         self.load_image_button = QPushButton("Загрузить изображение")
         self.load_image_button.clicked.connect(self.load_image)
 
+        self.delete_button = QPushButton("Удалить")
+        self.delete_button.setStyleSheet("""
+            QPushButton {
+                background-color: #ff8080;
+                color: #000000;
+                font-family: Calibri;
+                padding: 8px 16px;
+                border-radius: 0px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #ff5050;
+            }
+        """)
+        self.delete_button.clicked.connect(self.delete_product)
+
         layout.addWidget(self.image_label)
         layout.addWidget(self.name_label)
         layout.addWidget(self.price_label)
@@ -189,6 +204,7 @@ class ProductCard(QDialog):
         layout.addWidget(self.quantity_spin)
         layout.addWidget(self.add_button)
         layout.addWidget(self.load_image_button)
+        layout.addWidget(self.delete_button)
 
     def load_product(self, product_id):
         self.product_id = product_id
@@ -321,6 +337,41 @@ class ProductCard(QDialog):
             pass
 
         self.load_product(self.product_id)
+
+    def delete_product(self):
+        reply = QMessageBox.question(
+            self, "Удаление", "Вы уверены, что хотите удалить товар?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        conn = self.db.get_connection()
+        if conn is None:
+            QMessageBox.critical(self, "Ошибка", "Нет подключения к БД")
+            return
+        
+        import psycopg
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM products WHERE product_id = %s", (self.product_id,))
+            conn.commit()
+            cursor.close()
+            
+            QMessageBox.information(self, "Успех", "Товар удалён")
+            
+            if self.main_window is not None and hasattr(self.main_window, "load_products"):
+                self.main_window.load_products()
+            
+            self.close()
+            
+        except psycopg.errors.ForeignKeyViolation:
+            conn.rollback()
+            QMessageBox.critical(self, "Ошибка", "Товар нельзя удалить: он есть в заказах")
+        except Exception as e:
+            conn.rollback()
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении: {e}")
 
 
 class MainWindow(QMainWindow):
