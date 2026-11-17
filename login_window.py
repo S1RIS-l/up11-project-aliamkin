@@ -1,6 +1,8 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QLineEdit, 
+                               QPushButton, QMessageBox)
 from PySide6.QtGui import QIcon
 import os
+
 
 def validate_login(raw):
     login = raw.strip()
@@ -9,11 +11,16 @@ def validate_login(raw):
     if len(login) < 3:
         return None, "Логин должен содержать минимум 3 символа"
     return login, None
+
+
 class LoginWindow(QWidget):
     def __init__(self, db):
         super().__init__()
         self.db = db
         self.main_window = None
+        self.user_id = None
+        self.role_id = None
+        self.full_name = None
         self.setWindowTitle("Авторизация")
         self.resize(300, 200)
         
@@ -67,7 +74,6 @@ class LoginWindow(QWidget):
         self.setLayout(layout)
 
     def check_login(self):
-        """Проверяет логин в БД и открывает главное окно при успехе"""
         login, error = validate_login(self.login_input.text())
         
         if error:
@@ -90,29 +96,33 @@ class LoginWindow(QWidget):
             
             if result is None:
                 QMessageBox.critical(self, "Ошибка", "Пользователь не найден")
-            else:
-                self.user_id = result[0]
-                self.role_id = result[1]
-                last_name = result[2]
-                first_name = result[3]
-                middle_name = result[4] if result[4] else ""
-                self.full_name = f"{last_name} {first_name} {middle_name}".strip()
-                
-                QMessageBox.information(self, "Информация", f"Добро пожаловать, {self.full_name}!")
-                
-                self.open_main_window()
-        finally:
-            self.db.release_connection(conn)
+                return
+            
+            self.user_id = result[0]
+            self.role_id = result[1]
+            last_name = result[2]
+            first_name = result[3]
+            middle_name = result[4] if result[4] else ""
+            self.full_name = f"{last_name} {first_name} {middle_name}".strip()
+            
+            QMessageBox.information(self, "Информация", f"Добро пожаловать, {self.full_name}!")
+            
+            self.open_main_window()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при авторизации: {e}")
     
     def login_as_guest(self):
-        """Вход без авторизации (роль «гость»)."""
         self.role_id = None
         self.full_name = "Гость"
+        self.user_id = None
         self.open_main_window()
     
     def open_main_window(self):
-        """Открывает главное окно и закрывает окно входа."""
         from main import MainWindow
-        self.main_window = MainWindow(role_id=self.role_id, full_name=self.full_name)
+        self.main_window = MainWindow(
+            role_id=self.role_id, 
+            full_name=self.full_name, 
+            user_id=self.user_id
+        )
         self.main_window.show()
         self.close()

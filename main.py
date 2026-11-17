@@ -1,11 +1,17 @@
 import sys
 import os
-from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea, QHBoxLayout, QPushButton, QMessageBox, QComboBox, QLineEdit, QStackedWidget,QDialog, QSpinBox, QFileDialog, QTableWidget, QTableWidgetItem, QInputDialog)
+from decimal import Decimal
+from datetime import date
+from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, 
+                               QWidget, QScrollArea, QHBoxLayout, QPushButton, 
+                               QMessageBox, QComboBox, QLineEdit, QStackedWidget,
+                               QDialog, QSpinBox, QFileDialog, QTableWidget, QTableWidgetItem,
+                               QInputDialog)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
 from discount import calculate_price
-from decimal import Decimal
+
 
 def calculate_discount(old_price, new_price):
     if old_price == 0:
@@ -243,7 +249,7 @@ class ProductCard(QDialog):
             cursor.close()
             self.on_variant_changed()
         finally:
-            self.db.release_connection(conn)
+            pass
 
     def on_variant_changed(self, index=0):
         selected = self.size_combo.currentData()
@@ -312,7 +318,7 @@ class ProductCard(QDialog):
             QMessageBox.critical(self, "Изображение не сохранено", str(error))
             return
         finally:
-            self.db.release_connection(conn)
+            pass
 
         self.load_product(self.product_id)
 
@@ -425,6 +431,19 @@ class MainWindow(QMainWindow):
         
         try:
             cursor = conn.cursor()
+            
+            for row in range(self.cart_table.rowCount()):
+                item_name = self.cart_table.item(row, 0)
+                if item_name and item_name.text() == "Итого:":
+                    continue
+                product_id = int(self.cart_table.item(row, 4).text())
+                quantity = int(self.cart_table.item(row, 1).text())
+                cursor.execute("SELECT COALESCE(SUM(quantity), 0) FROM stock_items WHERE product_id = %s", (product_id,))
+                stock = cursor.fetchone()[0]
+                if stock < quantity:
+                    QMessageBox.critical(self, "Ошибка", f"Недостаточно товара (ID {product_id}) на складе")
+                    return
+            
             cursor.execute(
                 "INSERT INTO orders (order_date, user_id, status) VALUES (%s, %s, %s) RETURNING order_id",
                 (date.today(), self.user_id, "Новый")
@@ -443,6 +462,14 @@ class MainWindow(QMainWindow):
                     "INSERT INTO order_items (order_id, product_id, variant_id, quantity, price) VALUES (%s, %s, %s, %s, %s)",
                     (order_id, product_id, variant_id, quantity, price)
                 )
+                cursor.execute(
+                    "UPDATE stock_items SET quantity = quantity - %s WHERE product_id = %s AND variant_id = %s",
+                    (quantity, product_id, variant_id)
+                )
+                if cursor.rowcount == 0:
+                    QMessageBox.warning(self, "Ошибка", f"Нет остатков для товара (ID {product_id})")
+                    conn.rollback()
+                    return
             
             conn.commit()
             cursor.close()
@@ -453,9 +480,9 @@ class MainWindow(QMainWindow):
             
         except Exception as e:
             conn.rollback()
-            QMessageBox.critical(self, "Ошибка", f"Ошибка: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {e}")
         finally:
-            self.db.release_connection(conn)
+            pass
 
     def setup_ui(self):
         main_widget = QWidget()
@@ -748,7 +775,7 @@ class MainWindow(QMainWindow):
             self.products = cursor.fetchall()
             cursor.close()
         finally:
-            self.db.release_connection(conn)
+            pass
         
         self.refresh_catalog()
 

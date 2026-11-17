@@ -1,33 +1,39 @@
-import psycopg2
-from psycopg2 import pool
+import psycopg
+from psycopg import Error as PsycopgError
+
 
 class Database:
-
     def __init__(self):
-        self.connection_pool = None
+        self.connection = None
+        self.cursor = None
+        self.connect()
+
+    def connect(self):
         try:
-            self.connection_pool = pool.SimpleConnectionPool(
-                1, 5,
+            self.connection = psycopg.connect(
                 host="localhost",
                 port=5432,
-                database="opticworld",
+                dbname="opticworld",
                 user="postgres",
-                password="123",
-                client_encoding="UTF8"
+                password="123"
             )
-        except psycopg2.Error as e:
-            print(f"Ошибка БД: {e}")
-            self.connection_pool = None
+            self.cursor = self.connection.cursor()
+            return True
+        except PsycopgError as e:
+            print(f"Ошибка подключения: {e}")
+            return False
+
+    def get_connection(self):
+        if self.connection is None or self.connection.closed:
+            self.connect()
+        return self.connection
 
     def get_products(self):
-        """Список всех товаров с категорией и суммарным остатком"""
         conn = self.get_connection()
         if conn is None:
             return []
-        
         try:
             cursor = conn.cursor()
-            # COALESCE(SUM(si.quantity), 0) — если остатков нет, возвращаем 0
             query = """
                 SELECT 
                     p.product_id, 
@@ -49,10 +55,9 @@ class Database:
             cursor.close()
             return products
         finally:
-            self.release_connection(conn)
+            pass
 
     def get_categories(self):
-        """Список категорий для фильтра"""
         conn = self.get_connection()
         if conn is None:
             return []
@@ -63,20 +68,10 @@ class Database:
             cursor.close()
             return categories
         finally:
-            self.release_connection(conn)
-    
-    def get_connection(self):
-        """Берёт соединение из пула"""
-        if self.connection_pool is None:
-            return None
-        return self.connection_pool.getconn()
-
-    def release_connection(self, conn):
-        """Возвращает соединение обратно в пул"""
-        if self.connection_pool is not None and conn is not None:
-            self.connection_pool.putconn(conn)
+            pass
 
     def close_all(self):
-        """Закрывает пул соединений (при полном выходе из окна)"""
-        if self.connection_pool is not None:
-            self.connection_pool.closeall()
+        if self.cursor is not None:
+            self.cursor.close()
+        if self.connection is not None:
+            self.connection.close()
