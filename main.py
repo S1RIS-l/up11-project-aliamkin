@@ -600,7 +600,6 @@ class MainWindow(QMainWindow):
 
         self.stacked_widget = QStackedWidget()
         
-        # Страница 0: Каталог
         self.catalog_page = QWidget()
         self.setup_catalog_page()
         self.stacked_widget.addWidget(self.catalog_page)
@@ -642,45 +641,26 @@ class MainWindow(QMainWindow):
         self.orders_table.setHorizontalHeaderLabels(["№", "Дата", "ФИО клиента", "Сумма", "Статус"])
         orders_layout.addWidget(self.orders_table)
         
-        self.role_stack = QStackedWidget()
-        self.role_stack.setFixedHeight(45)
-        
-        # Индекс 0: Страница Менеджера
-        self.manager_page = QWidget()
-        manager_btns = QHBoxLayout(self.manager_page)
-        manager_btns.setContentsMargins(0, 0, 0, 0)
-        manager_btns.setSpacing(15)
-
-        self.mgr_add_order_btn = QPushButton("Добавить заказ")
-        self.mgr_del_order_btn = QPushButton("Удалить заказ")
-        for btn in (self.mgr_add_order_btn, self.mgr_del_order_btn):
-            btn.setStyleSheet(btn_style)
-            manager_btns.addWidget(btn)
-        manager_btns.addStretch()
-        self.role_stack.addWidget(self.manager_page)
-        
-        # Индекс 1: Страница Администратора
-        self.admin_page = QWidget()
-        admin_btns = QHBoxLayout(self.admin_page)
-        admin_btns.setContentsMargins(0, 0, 0, 0)
-        admin_btns.setSpacing(15)
+        order_btns_layout = QHBoxLayout()
+        order_btns_layout.setContentsMargins(0, 0, 0, 0)
+        order_btns_layout.setSpacing(15)
 
         self.add_order_button = QPushButton("Добавить заказ")
         self.edit_order_button = QPushButton("Редактировать заказ")
-        self.delete_order_button = QPushButton("Удалить заказ")
-        for btn in (self.add_order_button, self.edit_order_button, self.delete_order_button):
+
+        for btn in (self.add_order_button, self.edit_order_button):
+            btn.setMinimumWidth(140)
             btn.setStyleSheet(btn_style)
-            admin_btns.addWidget(btn)
-        admin_btns.addStretch()
-        self.role_stack.addWidget(self.admin_page)
+            order_btns_layout.addWidget(btn)
+
+        order_btns_layout.addStretch()
+        orders_layout.addLayout(order_btns_layout)
         
-        orders_layout.addWidget(self.role_stack)
         self.stacked_widget.addWidget(self.orders_page)
         
         self.stacked_widget.setCurrentIndex(0)
         main_layout.addWidget(self.stacked_widget)
 
-        # Нижняя панель навигации
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(15)
         
@@ -885,23 +865,34 @@ class MainWindow(QMainWindow):
             self.admin_button.show()
             self.manager_button.show()
             self.cart_button.show()
-            self.role_stack.setCurrentIndex(1)
             self.add_order_button.show()
             self.edit_order_button.show()
-            self.delete_order_button.show()
         elif self.role_id == 2:
             self.admin_button.hide()
             self.manager_button.show()
             self.cart_button.show()
-            self.role_stack.setCurrentIndex(0)
+            self.add_order_button.show()
+            self.edit_order_button.hide()
         elif self.role_id == 3:
             self.admin_button.hide()
             self.manager_button.hide()
             self.cart_button.show()
+            self.add_order_button.hide()
+            self.edit_order_button.hide()
         else:
             self.manager_button.hide()
             self.admin_button.hide()
             self.cart_button.hide()
+            self.add_order_button.hide()
+            self.edit_order_button.hide()
+
+        self.check_buttons_visibility()
+
+    def check_buttons_visibility(self):
+        orders_btn = self.manager_button if self.role_id == 2 else self.admin_button
+        print("Orders button visible:", not orders_btn.isHidden())
+        print("Add button visible:", not self.add_order_button.isHidden())
+        print("Edit button visible:", not self.edit_order_button.isHidden())
 
     def logout(self):
         reply = QMessageBox.question(
@@ -922,7 +913,7 @@ class MainWindow(QMainWindow):
             return
 
         reply = QMessageBox.warning(
-            self, "Выход", "Вы уверены, что хотите закрыть программу?",
+            self, "Выход", "Вы уверены, что хотите выйти?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
