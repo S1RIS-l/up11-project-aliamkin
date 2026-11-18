@@ -94,7 +94,7 @@ def create_card(product, on_click=None):
         
     right_layout.addWidget(quantity_label)
     
-    composition_label = QLabel(f"Состав: {composition}")
+    composition_label = QLabel(f"Состав: {composition or 'Не указан'}")
     composition_label.setStyleSheet("font-size: 14px;")
     composition_label.setWordWrap(True)
     right_layout.addWidget(composition_label)
@@ -144,7 +144,7 @@ class ProductCard(QDialog):
         self.main_window = parent
         self.product = {}
         self.setWindowTitle("Карточка товара")
-        self.resize(400, 650)
+        self.resize(400, 600)
         self.setup_ui()
         self.load_product(product_id)
 
@@ -265,7 +265,7 @@ class ProductCard(QDialog):
             cursor.close()
             self.on_variant_changed()
         finally:
-            pass
+            self.db.release_connection(conn)
 
     def on_variant_changed(self, index=0):
         selected = self.size_combo.currentData()
@@ -334,11 +334,13 @@ class ProductCard(QDialog):
             QMessageBox.critical(self, "Изображение не сохранено", str(error))
             return
         finally:
-            pass
+            self.db.release_connection(conn)
 
         self.load_product(self.product_id)
 
     def delete_product(self):
+        import psycopg
+
         reply = QMessageBox.question(
             self, "Удаление", "Вы уверены, что хотите удалить товар?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -346,42 +348,45 @@ class ProductCard(QDialog):
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
-        
+
         conn = self.db.get_connection()
         if conn is None:
             QMessageBox.critical(self, "Ошибка", "Нет подключения к БД")
             return
-        
-        import psycopg
+
         try:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM products WHERE product_id = %s", (self.product_id,))
+            cursor.execute(
+                "DELETE FROM products WHERE product_id = %s",
+                (self.product_id,)
+            )
             conn.commit()
             cursor.close()
-            
+
             QMessageBox.information(self, "Успех", "Товар удалён")
-            
             if self.main_window is not None and hasattr(self.main_window, "load_products"):
                 self.main_window.load_products()
-            
             self.close()
-            
+
         except psycopg.errors.ForeignKeyViolation:
             conn.rollback()
             QMessageBox.critical(self, "Ошибка", "Товар нельзя удалить: он есть в заказах")
         except Exception as e:
             conn.rollback()
             QMessageBox.critical(self, "Ошибка", f"Ошибка при удалении: {e}")
+        finally:
+            self.db.release_connection(conn)
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, role_id=None, full_name=None, user_id=None):
+    def __init__(self, role_id=None, full_name=None, user_id=None, db=None):
         super().__init__()
         self.role_id = role_id
         self.full_name = full_name
         self.user_id = user_id
+        self.is_logging_out = False
         self.setWindowTitle("Мир Оптики")
-        self.resize(900, 700)
+        self.resize(1000, 750)
         self.setWindowIcon(QIcon("resources/icon.ico"))
         
         self.setStyleSheet("""
@@ -528,12 +533,13 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Успех", "Заказ оформлен")
             self.cart_table.setRowCount(0)
             self.update_total()
+            self.load_orders()
             
         except Exception as e:
             conn.rollback()
             QMessageBox.critical(self, "Ошибка", f"Ошибка при сохранении: {e}")
         finally:
-            pass
+            self.db.release_connection(conn)
 
     def setup_ui(self):
         main_widget = QWidget()
@@ -551,12 +557,18 @@ class MainWindow(QMainWindow):
         header_layout.addStretch()
         
         if self.full_name:
-            self.name_label = QLabel(f"ФИО: {self.full_name}")
+            roles_map = {
+                1: "Администратор",
+                2: "Менеджер",
+                3: "Авторизованный пользователь"
+            }
+            role_name = roles_map.get(self.role_id)
+            header_text = f"ФИО: {self.full_name}, {role_name}" if role_name else f"ФИО: {self.full_name}"
+            self.name_label = QLabel(header_text)
             self.name_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #000000;")
             header_layout.addWidget(self.name_label)
         
-        self.logout_button = QPushButton("Выход")
-        self.logout_button.setStyleSheet("""
+        btn_style = """
             QPushButton {
                 background-color: #70B2AF;
                 color: #000000;
@@ -568,7 +580,10 @@ class MainWindow(QMainWindow):
             QPushButton:hover {
                 background-color: #D2F6E7;
             }
-        """)
+        """
+
+        self.logout_button = QPushButton("Выход")
+        self.logout_button.setStyleSheet(btn_style)
         self.logout_button.clicked.connect(self.logout)
         header_layout.addWidget(self.logout_button)
         
@@ -585,10 +600,12 @@ class MainWindow(QMainWindow):
 
         self.stacked_widget = QStackedWidget()
         
+        # Страница 0: Каталог
         self.catalog_page = QWidget()
         self.setup_catalog_page()
         self.stacked_widget.addWidget(self.catalog_page)
         
+        # Страница 1: Корзина
         self.cart_page = QWidget()
         cart_layout = QVBoxLayout(self.cart_page)
         
@@ -599,95 +616,81 @@ class MainWindow(QMainWindow):
         cart_layout.addWidget(self.cart_table)
         
         self.change_button = QPushButton("Изменить количество")
-        self.change_button.setStyleSheet("""
-            QPushButton {
-                background-color: #70B2AF;
-                color: #000000;
-                font-family: Calibri;
-                padding: 8px 16px;
-                border-radius: 0px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #D2F6E7;
-            }
-        """)
+        self.change_button.setStyleSheet(btn_style)
         self.change_button.clicked.connect(self.on_change_quantity_clicked)
         cart_layout.addWidget(self.change_button)
         
         self.remove_button = QPushButton("Удалить из корзины")
-        self.remove_button.setStyleSheet("""
-            QPushButton {
-                background-color: #70B2AF;
-                color: #000000;
-                font-family: Calibri;
-                padding: 8px 16px;
-                border-radius: 0px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #D2F6E7;
-            }
-        """)
+        self.remove_button.setStyleSheet(btn_style)
         self.remove_button.clicked.connect(self.remove_from_cart)
         cart_layout.addWidget(self.remove_button)
         
         self.confirm_button = QPushButton("Подтвердить заказ")
-        self.confirm_button.setStyleSheet("""
-            QPushButton {
-                background-color: #70B2AF;
-                color: #000000;
-                font-family: Calibri;
-                padding: 8px 16px;
-                border-radius: 0px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #D2F6E7;
-            }
-        """)
+        self.confirm_button.setStyleSheet(btn_style)
         self.confirm_button.clicked.connect(self.confirm_order)
         cart_layout.addWidget(self.confirm_button)
         
         self.stacked_widget.addWidget(self.cart_page)
         
-        self.stacked_widget.setCurrentIndex(0)
+        self.orders_page = QWidget()
+        orders_layout = QVBoxLayout(self.orders_page)
+        orders_layout.setContentsMargins(0, 0, 0, 0)
+        orders_layout.setSpacing(12)
+
+        self.orders_table = QTableWidget()
+        self.orders_table.setColumnCount(5)
+        self.orders_table.setHorizontalHeaderLabels(["№", "Дата", "ФИО клиента", "Сумма", "Статус"])
+        orders_layout.addWidget(self.orders_table)
         
+        self.role_stack = QStackedWidget()
+        self.role_stack.setFixedHeight(45)
+        
+        # Индекс 0: Страница Менеджера
+        self.manager_page = QWidget()
+        manager_btns = QHBoxLayout(self.manager_page)
+        manager_btns.setContentsMargins(0, 0, 0, 0)
+        manager_btns.setSpacing(15)
+
+        self.mgr_add_order_btn = QPushButton("Добавить заказ")
+        self.mgr_del_order_btn = QPushButton("Удалить заказ")
+        for btn in (self.mgr_add_order_btn, self.mgr_del_order_btn):
+            btn.setStyleSheet(btn_style)
+            manager_btns.addWidget(btn)
+        manager_btns.addStretch()
+        self.role_stack.addWidget(self.manager_page)
+        
+        # Индекс 1: Страница Администратора
+        self.admin_page = QWidget()
+        admin_btns = QHBoxLayout(self.admin_page)
+        admin_btns.setContentsMargins(0, 0, 0, 0)
+        admin_btns.setSpacing(15)
+
+        self.add_order_button = QPushButton("Добавить заказ")
+        self.edit_order_button = QPushButton("Редактировать заказ")
+        self.delete_order_button = QPushButton("Удалить заказ")
+        for btn in (self.add_order_button, self.edit_order_button, self.delete_order_button):
+            btn.setStyleSheet(btn_style)
+            admin_btns.addWidget(btn)
+        admin_btns.addStretch()
+        self.role_stack.addWidget(self.admin_page)
+        
+        orders_layout.addWidget(self.role_stack)
+        self.stacked_widget.addWidget(self.orders_page)
+        
+        self.stacked_widget.setCurrentIndex(0)
         main_layout.addWidget(self.stacked_widget)
 
+        # Нижняя панель навигации
         buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(15)
         
         self.cart_button = QPushButton("Корзина")
-        self.cart_button.setStyleSheet("""
-            QPushButton {
-                background-color: #70B2AF;
-                color: #000000;
-                font-family: Calibri;
-                padding: 8px 16px;
-                border-radius: 0px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #D2F6E7;
-            }
-        """)
+        self.cart_button.setStyleSheet(btn_style)
         self.cart_button.clicked.connect(lambda: self.switch_page(1))
         buttons_layout.addWidget(self.cart_button)
         
         self.back_button = QPushButton("Назад")
-        self.back_button.setStyleSheet("""
-            QPushButton {
-                background-color: #70B2AF;
-                color: #000000;
-                font-family: Calibri;
-                padding: 8px 16px;
-                border-radius: 0px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #D2F6E7;
-            }
-        """)
+        self.back_button.setStyleSheet(btn_style)
         self.back_button.clicked.connect(self.go_back)
         buttons_layout.addWidget(self.back_button)
         
@@ -724,9 +727,8 @@ class MainWindow(QMainWindow):
         layout.addLayout(controls_layout)
         
         buttons_layout = QHBoxLayout()
-        
-        self.order_button = QPushButton("Оформить заказ")
-        self.manager_button = QPushButton("Заказы (менеджер)")
+
+        self.manager_button = QPushButton("Заказы")
         self.admin_button = QPushButton("Админ-панель")
         
         button_style = """
@@ -742,11 +744,12 @@ class MainWindow(QMainWindow):
                 background-color: #D2F6E7;
             }
         """
-        self.order_button.setStyleSheet(button_style)
         self.manager_button.setStyleSheet(button_style)
         self.admin_button.setStyleSheet(button_style)
+
+        self.manager_button.clicked.connect(lambda: self.switch_page(2))
+        self.admin_button.clicked.connect(lambda: self.switch_page(2))
         
-        buttons_layout.addWidget(self.order_button)
         buttons_layout.addWidget(self.manager_button)
         buttons_layout.addWidget(self.admin_button)
         buttons_layout.addStretch()
@@ -772,19 +775,54 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(self.catalog_scroll)
 
+    def load_orders(self):
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT o.order_id, o.order_date, "
+                "COALESCE(u.last_name, 'Гость'), COALESCE(u.first_name, ''), COALESCE(u.middle_name, ''), "
+                "COALESCE(SUM(oi.quantity * oi.price), 0), o.status "
+                "FROM orders o "
+                "LEFT JOIN users u ON o.user_id = u.user_id "
+                "LEFT JOIN order_items oi ON o.order_id = oi.order_id "
+                "GROUP BY o.order_id, o.order_date, u.last_name, u.first_name, u.middle_name, o.status "
+                "ORDER BY o.order_id"
+            )
+            orders = cursor.fetchall()
+            cursor.close()
+            
+            self.orders_table.setRowCount(0)
+            for order in orders:
+                order_id, order_date, last_name, first_name, middle_name, total, status = order
+                fio = f"{last_name} {first_name} {middle_name}".strip()
+                row = self.orders_table.rowCount()
+                self.orders_table.insertRow(row)
+                self.orders_table.setItem(row, 0, QTableWidgetItem(str(order_id)))
+                self.orders_table.setItem(row, 1, QTableWidgetItem(str(order_date)))
+                self.orders_table.setItem(row, 2, QTableWidgetItem(fio))
+                self.orders_table.setItem(row, 3, QTableWidgetItem(f"{total:.2f} ₽"))
+                self.orders_table.setItem(row, 4, QTableWidgetItem(status))
+        finally:
+            self.db.release_connection(conn)
+
     def go_back(self):
         current_index = self.stacked_widget.currentIndex()
         if current_index > 0:
-            self.switch_page(current_index - 1)
+            self.switch_page(0)
 
     def switch_page(self, index):
         self.stacked_widget.setCurrentIndex(index)
         
-        titles = ["Мир Оптики — Каталог", "Мир Оптики — Корзина"]
+        titles = ["Мир Оптики — Каталог", "Мир Оптики — Корзина", "Мир Оптики — Заказы"]
         self.title_label.setText(titles[index])
         
         if index == 0:
             self.refresh_catalog()
+        elif index == 2:
+            self.load_orders()
 
     def load_products(self):
         search = self.search_input.text().strip()
@@ -826,7 +864,7 @@ class MainWindow(QMainWindow):
             self.products = cursor.fetchall()
             cursor.close()
         finally:
-            pass
+            self.db.release_connection(conn)
         
         self.refresh_catalog()
 
@@ -846,26 +884,45 @@ class MainWindow(QMainWindow):
         if self.role_id == 1:
             self.admin_button.show()
             self.manager_button.show()
-            self.order_button.hide()
+            self.cart_button.show()
+            self.role_stack.setCurrentIndex(1)
+            self.add_order_button.show()
+            self.edit_order_button.show()
+            self.delete_order_button.show()
         elif self.role_id == 2:
             self.admin_button.hide()
             self.manager_button.show()
-            self.order_button.hide()
+            self.cart_button.show()
+            self.role_stack.setCurrentIndex(0)
         elif self.role_id == 3:
             self.admin_button.hide()
             self.manager_button.hide()
-            self.order_button.show()
+            self.cart_button.show()
         else:
-            self.order_button.hide()
             self.manager_button.hide()
             self.admin_button.hide()
+            self.cart_button.hide()
 
     def logout(self):
-        self.close()
+        reply = QMessageBox.question(
+            self, "Выход", "Вы уверены, что хотите выйти?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            from login_window import LoginWindow
+            self.is_logging_out = True
+            self.login_window = LoginWindow(self.db)
+            self.login_window.show()
+            self.close()
 
     def closeEvent(self, event):
+        if self.is_logging_out:
+            event.accept()
+            return
+
         reply = QMessageBox.warning(
-            self, "Выход", "Вы уверены, что хотите выйти?",
+            self, "Выход", "Вы уверены, что хотите закрыть программу?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )

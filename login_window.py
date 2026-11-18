@@ -122,7 +122,8 @@ class LoginWindow(QWidget):
         self.main_window = MainWindow(
             role_id=self.role_id, 
             full_name=self.full_name, 
-            user_id=self.user_id
+            user_id=self.user_id,
+            db=self.db
         )
         self.main_window.show()
         self.close()

@@ -28,6 +28,9 @@ class Database:
             self.connect()
         return self.connection
 
+    def release_connection(self, conn):
+        pass
+
     def get_products(self):
         conn = self.get_connection()
         if conn is None:
