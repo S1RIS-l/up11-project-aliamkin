@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout,
                                QWidget, QScrollArea, QHBoxLayout, QPushButton, 
                                QMessageBox, QComboBox, QLineEdit, QStackedWidget,
                                QDialog, QSpinBox, QFileDialog, QTableWidget, QTableWidgetItem,
-                               QInputDialog)
+                               QInputDialog, QAbstractItemView)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
@@ -177,6 +177,8 @@ class ProductCard(QDialog):
 
         self.load_image_button = QPushButton("Загрузить изображение")
         self.load_image_button.clicked.connect(self.load_image)
+
+        
 
         self.delete_button = QPushButton("Удалить")
         self.delete_button.setStyleSheet("""
@@ -637,8 +639,9 @@ class MainWindow(QMainWindow):
         orders_layout.setSpacing(12)
 
         self.orders_table = QTableWidget()
-        self.orders_table.setColumnCount(5)
-        self.orders_table.setHorizontalHeaderLabels(["№", "Дата", "ФИО клиента", "Сумма", "Статус"])
+        self.orders_table.setColumnCount(4)
+        self.orders_table.setHorizontalHeaderLabels(["Дата", "ФИО клиента", "Сумма", "Статус"])
+        self.orders_table.cellClicked.connect(self.on_order_click)
         orders_layout.addWidget(self.orders_table)
         
         order_btns_layout = QHBoxLayout()
@@ -761,32 +764,38 @@ class MainWindow(QMainWindow):
             return
         try:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT o.order_id, o.order_date, "
-                "COALESCE(u.last_name, 'Гость'), COALESCE(u.first_name, ''), COALESCE(u.middle_name, ''), "
-                "COALESCE(SUM(oi.quantity * oi.price), 0), o.status "
-                "FROM orders o "
-                "LEFT JOIN users u ON o.user_id = u.user_id "
-                "LEFT JOIN order_items oi ON o.order_id = oi.order_id "
-                "GROUP BY o.order_id, o.order_date, u.last_name, u.first_name, u.middle_name, o.status "
-                "ORDER BY o.order_id"
-            )
+            cursor.execute("""
+                SELECT o.order_id, o.order_date,
+                       CONCAT_WS(' ', u.last_name, u.first_name, u.middle_name) AS full_name,
+                       COALESCE(SUM(oi.quantity * oi.price), 0) AS total,
+                       o.status
+                FROM orders o
+                LEFT JOIN users u ON o.user_id = u.user_id
+                LEFT JOIN order_items oi ON o.order_id = oi.order_id
+                GROUP BY o.order_id, o.order_date, u.last_name, u.first_name, u.middle_name, o.status
+                ORDER BY o.order_date ASC
+            """)
             orders = cursor.fetchall()
             cursor.close()
-            
-            self.orders_table.setRowCount(0)
-            for order in orders:
-                order_id, order_date, last_name, first_name, middle_name, total, status = order
-                fio = f"{last_name} {first_name} {middle_name}".strip()
-                row = self.orders_table.rowCount()
-                self.orders_table.insertRow(row)
-                self.orders_table.setItem(row, 0, QTableWidgetItem(str(order_id)))
-                self.orders_table.setItem(row, 1, QTableWidgetItem(str(order_date)))
-                self.orders_table.setItem(row, 2, QTableWidgetItem(fio))
-                self.orders_table.setItem(row, 3, QTableWidgetItem(f"{total:.2f} ₽"))
-                self.orders_table.setItem(row, 4, QTableWidgetItem(status))
+
+            self.orders_table.setRowCount(len(orders))
+            for row, order in enumerate(orders):
+                date_item = QTableWidgetItem(str(order[1]))
+                date_item.setData(Qt.UserRole, order[0])
+                full_name = order[2] if order[2] else "Гость"
+
+                self.orders_table.setItem(row, 0, date_item)
+                self.orders_table.setItem(row, 1, QTableWidgetItem(full_name))
+                self.orders_table.setItem(row, 2, QTableWidgetItem(f"{order[3]:.2f} ₽"))
+                self.orders_table.setItem(row, 3, QTableWidgetItem(order[4] or "Новый"))
         finally:
             self.db.release_connection(conn)
+
+    def on_order_click(self, row, column):
+        item = self.orders_table.item(row, 0)
+        if item is not None:
+            order_id = item.data(Qt.UserRole)
+            self.load_order_details(order_id)
 
     def go_back(self):
         current_index = self.stacked_widget.currentIndex()
