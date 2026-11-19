@@ -1,3 +1,4 @@
+#комментарий
 import sys
 import os
 from decimal import Decimal
@@ -384,6 +385,9 @@ class AddOrderDialog(QDialog):
     def __init__(self, db, parent=None):
         super().__init__(parent)
         self.db = db
+        self.order_id = None
+        self.selected_product_id = None
+        self.selected_price = 0
         self.setWindowTitle("Добавить заказ")
         self.setup_ui()
 
@@ -414,9 +418,36 @@ class AddOrderDialog(QDialog):
         self.save_button.clicked.connect(self.save_order)
         layout.addWidget(self.save_button)
 
-        self.cancel_button = QPushButton("Отмена")
-        self.cancel_button.clicked.connect(self.reject)
+        layout.addWidget(QLabel("Поиск товара:"))
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Поиск...")
+        self.search_input.textChanged.connect(self.load_products)
+        layout.addWidget(self.search_input)
+
+        self.products_combo = QComboBox()
+        self.products_combo.currentIndexChanged.connect(self.on_product_changed)
+        layout.addWidget(self.products_combo)
+
+        layout.addWidget(QLabel("Вариант:"))
+        self.variant_combo = QComboBox()
+        self.variant_combo.currentIndexChanged.connect(self.on_variant_changed)
+        layout.addWidget(self.variant_combo)
+
+        layout.addWidget(QLabel("Количество:"))
+        self.quantity_spin = QSpinBox()
+        self.quantity_spin.setMinimum(1)
+        self.quantity_spin.setMaximum(10)
+        layout.addWidget(self.quantity_spin)
+
+        self.add_item_button = QPushButton("Добавить в заказ")
+        self.add_item_button.clicked.connect(lambda: self.add_item_to_order(self.order_id))
+        layout.addWidget(self.add_item_button)
+
+        self.cancel_button = QPushButton("Закрыть")
+        self.cancel_button.clicked.connect(self.accept)
         layout.addWidget(self.cancel_button)
+
+        self.load_products()
 
     def save_order(self):
         conn = self.db.get_connection()
@@ -432,11 +463,110 @@ class AddOrderDialog(QDialog):
                 "INSERT INTO orders (order_date, user_id, status) VALUES (%s, %s, %s) RETURNING order_id",
                 (date.today(), user_id, status)
             )
-            order_id = cursor.fetchone()[0]
+            self.order_id = cursor.fetchone()[0]
             conn.commit()
             cursor.close()
-            QMessageBox.information(self, "Успех", "Заказ добавлен")
-            self.accept()
+            QMessageBox.information(self, "Успех", f"Заказ № {self.order_id} создан")
+        except Exception as e:
+            conn.rollback()
+            QMessageBox.critical(self, "Ошибка", f"Ошибка: {e}")
+        finally:
+            self.db.release_connection(conn)
+
+    def load_products(self):
+        search = self.search_input.text().strip()
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT p.product_id, p.name, p.price
+                FROM products p
+                WHERE p.name ILIKE %s
+            """, (f"%{search}%",))
+            products = cursor.fetchall()
+            cursor.close()
+
+            self.products_combo.clear()
+            for product in products:
+                self.products_combo.addItem(f"{product[1]} ({product[2]} ₽)", (product[0], product[2]))
+        finally:
+            self.db.release_connection(conn)
+
+    def on_product_changed(self):
+        data = self.products_combo.currentData()
+        if not data:
+            self.selected_product_id = None
+            self.selected_price = 0
+            self.variant_combo.clear()
+            return
+        self.selected_product_id, self.selected_price = data
+        self.load_variants(self.selected_product_id)
+
+    def load_variants(self, product_id):
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT si.variant_id, v.value, si.quantity
+                FROM stock_items si
+                JOIN variants v ON si.variant_id = v.variant_id
+                WHERE si.product_id = %s
+                ORDER BY v.value
+            """, (product_id,))
+            variants = cursor.fetchall()
+            cursor.close()
+
+            self.variant_combo.blockSignals(True)
+            self.variant_combo.clear()
+            for variant_id, value, stock in variants:
+                self.variant_combo.addItem(f"{value} (остаток: {stock})", (variant_id, stock))
+            self.variant_combo.blockSignals(False)
+            self.on_variant_changed()
+        finally:
+            self.db.release_connection(conn)
+
+    def on_variant_changed(self):
+        selected = self.variant_combo.currentData()
+        stock = max(0, int(selected[1])) if selected else 0
+        self.quantity_spin.setRange(1 if stock > 0 else 0, stock)
+        self.add_item_button.setEnabled(stock > 0)
+
+    def add_item_to_order(self, order_id):
+        if not order_id:
+            QMessageBox.warning(self, "Ошибка", "Сначала создайте заказ")
+            return
+
+        selected_variant = self.variant_combo.currentData()
+        if not selected_variant or self.quantity_spin.value() <= 0:
+            QMessageBox.warning(self, "Ошибка", "Выберите доступный вариант товара")
+            return
+
+        variant_id, _ = selected_variant
+        product_id = self.selected_product_id
+        quantity = self.quantity_spin.value()
+        price = self.selected_price
+
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO order_items (order_id, product_id, variant_id, quantity, price) VALUES (%s, %s, %s, %s, %s)",
+                (order_id, product_id, variant_id, quantity, price)
+            )
+            cursor.execute(
+                "UPDATE stock_items SET quantity = quantity - %s WHERE product_id = %s AND variant_id = %s",
+                (quantity, product_id, variant_id)
+            )
+            conn.commit()
+            cursor.close()
+            QMessageBox.information(self, "Успех", "Товар добавлен в заказ")
+            self.load_variants(product_id)
         except Exception as e:
             conn.rollback()
             QMessageBox.critical(self, "Ошибка", f"Ошибка: {e}")
@@ -972,8 +1102,8 @@ class MainWindow(QMainWindow):
 
     def open_add_order_dialog(self):
         dialog = AddOrderDialog(self.db, self)
-        if dialog.exec():
-            self.load_orders()
+        dialog.exec()
+        self.load_orders()
     
     def go_back(self):
         current_index = self.stacked_widget.currentIndex()
