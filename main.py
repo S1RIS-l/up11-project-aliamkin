@@ -380,6 +380,69 @@ class ProductCard(QDialog):
             self.db.release_connection(conn)
 
 
+class AddOrderDialog(QDialog):
+    def __init__(self, db, parent=None):
+        super().__init__(parent)
+        self.db = db
+        self.setWindowTitle("Добавить заказ")
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        layout.addWidget(QLabel("Клиент:"))
+        self.client_combo = QComboBox()
+        conn = self.db.get_connection()
+        if conn is not None:
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT user_id, CONCAT_WS(' ', last_name, first_name) FROM users WHERE role_id = 3")
+                for user in cursor.fetchall():
+                    self.client_combo.addItem(user[1], user[0])
+                cursor.close()
+            finally:
+                self.db.release_connection(conn)
+        layout.addWidget(self.client_combo)
+
+        layout.addWidget(QLabel("Статус:"))
+        self.status_combo = QComboBox()
+        self.status_combo.addItems(["Новый", "В обработке", "Завершён"])
+        self.status_combo.setCurrentIndex(0)
+        layout.addWidget(self.status_combo)
+
+        self.save_button = QPushButton("Сохранить")
+        self.save_button.clicked.connect(self.save_order)
+        layout.addWidget(self.save_button)
+
+        self.cancel_button = QPushButton("Отмена")
+        self.cancel_button.clicked.connect(self.reject)
+        layout.addWidget(self.cancel_button)
+
+    def save_order(self):
+        conn = self.db.get_connection()
+        if conn is None:
+            QMessageBox.critical(self, "Ошибка", "Нет подключения к БД")
+            return
+        try:
+            cursor = conn.cursor()
+            user_id = self.client_combo.currentData()
+            status = self.status_combo.currentText()
+
+            cursor.execute(
+                "INSERT INTO orders (order_date, user_id, status) VALUES (%s, %s, %s) RETURNING order_id",
+                (date.today(), user_id, status)
+            )
+            order_id = cursor.fetchone()[0]
+            conn.commit()
+            cursor.close()
+            QMessageBox.information(self, "Успех", "Заказ добавлен")
+            self.accept()
+        except Exception as e:
+            conn.rollback()
+            QMessageBox.critical(self, "Ошибка", f"Ошибка: {e}")
+        finally:
+            self.db.release_connection(conn)
+
 class MainWindow(QMainWindow):
     def __init__(self, role_id=None, full_name=None, user_id=None, db=None):
         super().__init__()
@@ -669,6 +732,7 @@ class MainWindow(QMainWindow):
         order_btns_layout.setSpacing(15)
 
         self.add_order_button = QPushButton("Добавить заказ")
+        self.add_order_button.clicked.connect(self.open_add_order_dialog)
         self.edit_order_button = QPushButton("Редактировать заказ")
 
         for btn in (self.add_order_button, self.edit_order_button):
@@ -906,6 +970,11 @@ class MainWindow(QMainWindow):
         self.load_total(order_id)
         self.load_orders()
 
+    def open_add_order_dialog(self):
+        dialog = AddOrderDialog(self.db, self)
+        if dialog.exec():
+            self.load_orders()
+    
     def go_back(self):
         current_index = self.stacked_widget.currentIndex()
         if current_index > 0:
