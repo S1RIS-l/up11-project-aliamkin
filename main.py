@@ -643,6 +643,26 @@ class MainWindow(QMainWindow):
         self.orders_table.setHorizontalHeaderLabels(["Дата", "ФИО клиента", "Сумма", "Статус"])
         self.orders_table.cellClicked.connect(self.on_order_click)
         orders_layout.addWidget(self.orders_table)
+
+        self.details_label = QLabel("Состав заказа:")
+        orders_layout.addWidget(self.details_label)
+
+        self.details_table = QTableWidget()
+        self.details_table.setColumnCount(4)
+        self.details_table.setHorizontalHeaderLabels(["Товар", "Количество", "Цена", "Сумма"])
+        orders_layout.addWidget(self.details_table)
+
+        self.total_label = QLabel("Итого: 0 ₽")
+        orders_layout.addWidget(self.total_label)
+
+        self.remove_item_btn = QPushButton("Удалить позицию")
+        self.remove_item_btn.clicked.connect(self.on_remove_item_click)
+        orders_layout.addWidget(self.remove_item_btn)
+
+        self.details_label.hide()
+        self.details_table.hide()
+        self.total_label.hide()
+        self.remove_item_btn.hide()
         
         order_btns_layout = QHBoxLayout()
         order_btns_layout.setContentsMargins(0, 0, 0, 0)
@@ -795,7 +815,96 @@ class MainWindow(QMainWindow):
         item = self.orders_table.item(row, 0)
         if item is not None:
             order_id = item.data(Qt.UserRole)
+            self.current_order_id = order_id
+
+            self.details_label.show()
+            self.details_table.show()
+            self.total_label.show()
+            self.remove_item_btn.show()
+
             self.load_order_details(order_id)
+            self.load_total(order_id)
+
+    def load_order_details(self, order_id):
+        if not order_id:
+            return
+
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT COALESCE(p.name, 'Товар удален') AS name,
+                       oi.quantity, oi.price, (oi.quantity * oi.price) AS total,
+                       oi.order_item_id
+                FROM order_items oi
+                LEFT JOIN products p ON oi.product_id = p.product_id
+                WHERE oi.order_id = %s
+            """, (order_id,))
+            items = cursor.fetchall()
+            cursor.close()
+
+            self.details_table.setRowCount(len(items))
+            for row, item in enumerate(items):
+                name_item = QTableWidgetItem(item[0])
+                name_item.setData(Qt.UserRole, item[4])
+
+                self.details_table.setItem(row, 0, name_item)
+                self.details_table.setItem(row, 1, QTableWidgetItem(str(item[1])))
+                self.details_table.setItem(row, 2, QTableWidgetItem(str(item[2])))
+                self.details_table.setItem(row, 3, QTableWidgetItem(str(item[3])))
+        finally:
+            self.db.release_connection(conn)
+
+    def load_total(self, order_id):
+        if not order_id:
+            return
+
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT COALESCE(SUM(quantity * price), 0) AS total
+                FROM order_items
+                WHERE order_id = %s
+            """, (order_id,))
+            total = cursor.fetchone()[0]
+            cursor.close()
+            self.total_label.setText(f"Итого: {total} ₽")
+        finally:
+            self.db.release_connection(conn)
+
+    def on_remove_item_click(self):
+        order_id = getattr(self, "current_order_id", None)
+        row = self.details_table.currentRow()
+        if not order_id or row < 0:
+            QMessageBox.warning(self, "Внимание", "Выберите позицию в составе заказа.")
+            return
+        order_item_id = self.details_table.item(row, 0).data(Qt.UserRole)
+        self.remove_item(order_id, order_item_id)
+
+    def remove_item(self, order_id, order_item_id):
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM order_items WHERE order_item_id = %s", (order_item_id,))
+            conn.commit()
+            cursor.close()
+        except Exception as e:
+            conn.rollback()
+            QMessageBox.critical(self, "Ошибка", f"Не удалось удалить позицию: {e}")
+            return
+        finally:
+            self.db.release_connection(conn)
+
+        self.load_order_details(order_id)
+        self.load_total(order_id)
+        self.load_orders()
 
     def go_back(self):
         current_index = self.stacked_widget.currentIndex()
