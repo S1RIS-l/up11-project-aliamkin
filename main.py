@@ -1,4 +1,4 @@
-#комментарий
+#Комментарий
 import sys
 import os
 from decimal import Decimal
