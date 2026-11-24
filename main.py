@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout,
                                QWidget, QScrollArea, QHBoxLayout, QPushButton, 
                                QMessageBox, QComboBox, QLineEdit, QStackedWidget,
                                QDialog, QSpinBox, QFileDialog, QTableWidget, QTableWidgetItem,
-                               QInputDialog, QAbstractItemView)
+                               QInputDialog, QAbstractItemView, QDateEdit)
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from database import Database
@@ -573,6 +573,104 @@ class AddOrderDialog(QDialog):
         finally:
             self.db.release_connection(conn)
 
+class EditOrderDialog(QDialog):
+    def __init__(self, db, order_id, parent=None):
+        super().__init__(parent)
+        self.db = db
+        self.order_id = order_id
+        self.setWindowTitle("Редактировать заказ")
+        self.setup_ui()
+        self.load_order_data()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        layout.addWidget(QLabel("Дата заказа:"))
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        layout.addWidget(self.date_edit)
+
+        layout.addWidget(QLabel("Клиент:"))
+        self.client_combo = QComboBox()
+        conn = self.db.get_connection()
+        if conn is not None:
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT user_id, CONCAT_WS(' ', last_name, first_name) FROM users WHERE role_id = 3")
+                for user in cursor.fetchall():
+                    self.client_combo.addItem(user[1], user[0])
+                cursor.close()
+            finally:
+                self.db.release_connection(conn)
+        layout.addWidget(self.client_combo)
+
+        layout.addWidget(QLabel("Статус:"))
+        self.status_combo = QComboBox()
+        self.status_combo.addItems(["Новый", "В обработке", "Завершён"])
+        layout.addWidget(self.status_combo)
+
+        self.save_button = QPushButton("Сохранить")
+        self.save_button.clicked.connect(self.save_order)
+        layout.addWidget(self.save_button)
+
+        self.cancel_button = QPushButton("Отмена")
+        self.cancel_button.clicked.connect(self.reject)
+        layout.addWidget(self.cancel_button)
+
+    def load_order_data(self):
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""SELECT order_date, user_id, status FROM orders WHERE order_id = %s""", (self.order_id,))
+            order = cursor.fetchone()
+            cursor.close()
+
+            if order is None:
+                QMessageBox.critical(self, "Ошибка", "Заказ не найден")
+                self.reject()
+                return
+
+            self.date_edit.setDate(order[0])
+
+            index = self.client_combo.findData(order[1])
+            if index >= 0:
+                self.client_combo.setCurrentIndex(index)
+
+            if order[2]:
+                self.status_combo.setCurrentText(order[2])
+        finally:
+            self.db.release_connection(conn)
+
+    def save_order(self):
+        conn = self.db.get_connection()
+        if conn is None:
+            QMessageBox.critical(self, "Ошибка", "Нет подключения к БД")
+            return
+        try:
+            cursor = conn.cursor()
+            user_id = self.client_combo.currentData()
+            status = self.status_combo.currentText()
+            order_date = self.date_edit.date().toString("yyyy-MM-dd")
+
+            cursor.execute("""
+                UPDATE orders
+                SET order_date = %s, user_id = %s, status = %s
+                WHERE order_id = %s
+            """, (order_date, user_id, status, self.order_id))
+            conn.commit()
+            cursor.close()
+            QMessageBox.information(self, "Успех", "Заказ обновлён")
+            if self.parent() is not None and hasattr(self.parent(), "load_orders"):
+                self.parent().load_orders()
+            self.accept()
+        except Exception as e:
+            conn.rollback()
+            QMessageBox.critical(self, "Ошибка", f"Ошибка: {e}")
+        finally:
+            self.db.release_connection(conn)
+
 class MainWindow(QMainWindow):
     def __init__(self, role_id=None, full_name=None, user_id=None, db=None):
         super().__init__()
@@ -864,6 +962,8 @@ class MainWindow(QMainWindow):
         self.add_order_button = QPushButton("Добавить заказ")
         self.add_order_button.clicked.connect(self.open_add_order_dialog)
         self.edit_order_button = QPushButton("Редактировать заказ")
+
+        self.edit_order_button.clicked.connect(self.open_edit_dialog)
 
         for btn in (self.add_order_button, self.edit_order_button):
             btn.setMinimumWidth(140)
@@ -1176,6 +1276,18 @@ class MainWindow(QMainWindow):
             self.list_layout.addWidget(card)
             
         self.list_layout.addStretch()
+
+    def open_edit_dialog(self):
+        row = self.orders_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Ошибка", "Выберите заказ")
+            return
+        order_id = self.orders_table.item(row, 0).data(Qt.UserRole)
+        if not order_id:
+            return
+        self.edit_dialog = EditOrderDialog(self.db, order_id, self)
+        if self.edit_dialog.exec():
+            self.load_orders()
 
     def setup_role_interface(self):
         if self.role_id == 1:
