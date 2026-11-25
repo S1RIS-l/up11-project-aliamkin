@@ -1359,8 +1359,8 @@ class MainWindow(QMainWindow):
 
     def open_add_order_dialog(self):
         dialog = AddOrderDialog(self.db, self)
-        dialog.exec()
-        self.load_orders()
+        if dialog.exec() == QDialog.Accepted:
+            self.load_orders()
     
     def go_back(self):
         current_index = self.stacked_widget.currentIndex()
@@ -1443,7 +1443,7 @@ class MainWindow(QMainWindow):
         if not order_id:
             return
         self.edit_dialog = EditOrderDialog(self.db, order_id, self)
-        if self.edit_dialog.exec():
+        if self.edit_dialog.exec() == QDialog.Accepted:
             self.load_orders()
 
     def setup_role_interface(self):
