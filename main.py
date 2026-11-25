@@ -1080,10 +1080,11 @@ class MainWindow(QMainWindow):
         self.add_order_button = QPushButton("Добавить заказ")
         self.add_order_button.clicked.connect(self.open_add_order_dialog)
         self.edit_order_button = QPushButton("Редактировать заказ")
-
         self.edit_order_button.clicked.connect(self.open_edit_dialog)
+        self.delete_order_button = QPushButton("Удалить заказ")
+        self.delete_order_button.clicked.connect(self.delete_order)
 
-        for btn in (self.add_order_button, self.edit_order_button):
+        for btn in (self.add_order_button, self.edit_order_button, self.delete_order_button):
             btn.setMinimumWidth(140)
             btn.setStyleSheet(btn_style)
             order_btns_layout.addWidget(btn)
@@ -1223,6 +1224,44 @@ class MainWindow(QMainWindow):
         finally:
             self.db.release_connection(conn)
 
+    def delete_order(self):
+        row = self.orders_table.currentRow()
+        order_id = self.orders_table.item(row, 0).data(Qt.UserRole) if row >= 0 else None
+        if not order_id:
+            QMessageBox.warning(self, "Ошибка", "Выберите заказ")
+            return
+
+        reply = QMessageBox.question(
+            self, "Удаление", "Вы уверены, что хотите удалить заказ?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        conn = self.db.get_connection()
+        if conn is None:
+            QMessageBox.critical(self, "Ошибка", "Нет подключения к БД")
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM order_items WHERE order_id = %s", (order_id,))
+            cursor.execute("DELETE FROM orders WHERE order_id = %s", (order_id,))
+            conn.commit()
+            cursor.close()
+
+            self.details_label.hide()
+            self.details_table.hide()
+            self.total_label.hide()
+            self.remove_item_btn.hide()
+
+            QMessageBox.information(self, "Успех", "Заказ удалён")
+            self.load_orders()
+        except Exception as e:
+            conn.rollback()
+            QMessageBox.critical(self, "Ошибка", f"Ошибка: {e}")
+        finally:
+            self.db.release_connection(conn)
+    
     def on_order_click(self, row, column):
         item = self.orders_table.item(row, 0)
         if item is not None:
@@ -1414,24 +1453,28 @@ class MainWindow(QMainWindow):
             self.cart_button.show()
             self.add_order_button.show()
             self.edit_order_button.show()
+            self.delete_order_button.show()
         elif self.role_id == 2:
             self.admin_button.hide()
             self.manager_button.show()
             self.cart_button.show()
             self.add_order_button.show()
             self.edit_order_button.hide()
+            self.delete_order_button.hide()
         elif self.role_id == 3:
             self.admin_button.hide()
             self.manager_button.hide()
             self.cart_button.show()
             self.add_order_button.hide()
             self.edit_order_button.hide()
+            self.delete_order_button.hide()
         else:
             self.manager_button.hide()
             self.admin_button.hide()
             self.cart_button.hide()
             self.add_order_button.hide()
             self.edit_order_button.hide()
+            self.delete_order_button.hide()
 
         self.check_buttons_visibility()
 
