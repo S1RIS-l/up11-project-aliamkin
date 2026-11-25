@@ -581,6 +581,8 @@ class EditOrderDialog(QDialog):
         self.setWindowTitle("Редактировать заказ")
         self.setup_ui()
         self.load_order_data()
+        self.load_order_details(self.order_id)
+        self.load_total(self.order_id)
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -589,6 +591,10 @@ class EditOrderDialog(QDialog):
         self.date_edit = QDateEdit()
         self.date_edit.setCalendarPopup(True)
         layout.addWidget(self.date_edit)
+
+        self.save_date_button = QPushButton("Сохранить дату")
+        self.save_date_button.clicked.connect(self.save_date)
+        layout.addWidget(self.save_date_button)
 
         layout.addWidget(QLabel("Клиент:"))
         self.client_combo = QComboBox()
@@ -609,6 +615,19 @@ class EditOrderDialog(QDialog):
         self.status_combo.addItems(["Новый", "В обработке", "Завершён"])
         layout.addWidget(self.status_combo)
 
+        layout.addWidget(QLabel("Состав заказа:"))
+        self.details_table = QTableWidget()
+        self.details_table.setColumnCount(4)
+        self.details_table.setHorizontalHeaderLabels(["Товар", "Количество", "Цена", "Сумма"])
+        layout.addWidget(self.details_table)
+
+        self.total_label = QLabel("Итого: 0 ₽")
+        layout.addWidget(self.total_label)
+
+        self.remove_item_button = QPushButton("Удалить позицию")
+        self.remove_item_button.clicked.connect(self.on_remove_item_clicked)
+        layout.addWidget(self.remove_item_button)
+
         self.save_button = QPushButton("Сохранить")
         self.save_button.clicked.connect(self.save_order)
         layout.addWidget(self.save_button)
@@ -623,7 +642,7 @@ class EditOrderDialog(QDialog):
             return
         try:
             cursor = conn.cursor()
-            cursor.execute("""SELECT order_date, user_id, status FROM orders WHERE order_id = %s""", (self.order_id,))
+            cursor.execute("SELECT order_date, user_id, status FROM orders WHERE order_id = %s", (self.order_id,))
             order = cursor.fetchone()
             cursor.close()
 
@@ -640,6 +659,105 @@ class EditOrderDialog(QDialog):
 
             if order[2]:
                 self.status_combo.setCurrentText(order[2])
+        finally:
+            self.db.release_connection(conn)
+
+    def load_order_details(self, order_id):
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT COALESCE(p.name, 'Товар удален') AS name,
+                       oi.quantity, oi.price, (oi.quantity * oi.price) AS total,
+                       oi.order_item_id
+                FROM order_items oi
+                LEFT JOIN products p ON oi.product_id = p.product_id
+                WHERE oi.order_id = %s
+            """, (order_id,))
+            items = cursor.fetchall()
+            cursor.close()
+
+            self.details_table.setRowCount(len(items))
+            for row, item in enumerate(items):
+                name_item = QTableWidgetItem(item[0])
+                name_item.setData(Qt.UserRole, item[4])
+                self.details_table.setItem(row, 0, name_item)
+                self.details_table.setItem(row, 1, QTableWidgetItem(str(item[1])))
+                self.details_table.setItem(row, 2, QTableWidgetItem(str(item[2])))
+                self.details_table.setItem(row, 3, QTableWidgetItem(str(item[3])))
+        finally:
+            self.db.release_connection(conn)
+
+    def load_total(self, order_id):
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT COALESCE(SUM(quantity * price), 0) AS total
+                FROM order_items
+                WHERE order_id = %s
+            """, (order_id,))
+            total = cursor.fetchone()[0]
+            cursor.close()
+            self.total_label.setText(f"Итого: {total} ₽")
+        finally:
+            self.db.release_connection(conn)
+
+    def on_remove_item_clicked(self):
+        row = self.details_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Ошибка", "Выберите позицию")
+            return
+        order_item_id = self.details_table.item(row, 0).data(Qt.UserRole)
+        self.remove_item(order_item_id)
+
+    def remove_item(self, order_item_id):
+        conn = self.db.get_connection()
+        if conn is None:
+            return
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM order_items WHERE order_item_id = %s",
+                (order_item_id,)
+            )
+            conn.commit()
+            cursor.close()
+            QMessageBox.information(self, "Успех", "Позиция удалена")
+            self.load_order_details(self.order_id)
+            self.load_total(self.order_id)
+            if self.parent() is not None and hasattr(self.parent(), "load_orders"):
+                self.parent().load_orders()
+        except Exception as e:
+            conn.rollback()
+            QMessageBox.critical(self, "Ошибка", f"Ошибка: {e}")
+        finally:
+            self.db.release_connection(conn)
+
+    def save_date(self):
+        conn = self.db.get_connection()
+        if conn is None:
+            QMessageBox.critical(self, "Ошибка", "Нет подключения к БД")
+            return
+        try:
+            cursor = conn.cursor()
+            new_date = self.date_edit.date().toString("yyyy-MM-dd")
+            cursor.execute(
+                "UPDATE orders SET order_date = %s WHERE order_id = %s",
+                (new_date, self.order_id)
+            )
+            conn.commit()
+            cursor.close()
+            QMessageBox.information(self, "Успех", "Дата обновлена")
+            if self.parent() is not None and hasattr(self.parent(), "load_orders"):
+                self.parent().load_orders()
+        except Exception as e:
+            conn.rollback()
+            QMessageBox.critical(self, "Ошибка", f"Ошибка: {e}")
         finally:
             self.db.release_connection(conn)
 
